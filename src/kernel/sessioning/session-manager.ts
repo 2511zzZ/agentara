@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import { config, logger, uuid } from "@/shared";
+import { config, createLogger, uuid } from "@/shared";
 
 import { Session } from "./session";
 import {
@@ -32,6 +32,14 @@ export interface SessionResolveOptions {
  */
 export class SessionManager {
   private readonly _diaryWriter = new SessionDiaryFileWriter();
+  private readonly _logger = createLogger("session-manager");
+
+  /**
+   * Start the session manager.
+   */
+  async start() {
+    this._logger.info("Session manager started");
+  }
 
   /**
    * Returns whether a session with the given id exists.
@@ -73,7 +81,7 @@ export class SessionManager {
     if (this.existsSession(sessionId)) {
       throw new SessionAlreadyExistsError(sessionId);
     }
-    logger.debug(`Creating session: ${sessionId}`);
+    this._logger.info(`Creating session: ${sessionId}`);
     const session = new Session(
       sessionId,
       options?.agentType ?? config.agents.default.type,
@@ -100,7 +108,7 @@ export class SessionManager {
     if (!this.existsSession(sessionId)) {
       throw new SessionNotFoundError(sessionId);
     }
-    logger.debug(`Resuming session: ${sessionId}`);
+    this._logger.info(`Resuming session: ${sessionId}`);
     const session = new Session(
       sessionId,
       options?.agentType ?? config.agents.default.type,

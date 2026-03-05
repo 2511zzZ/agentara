@@ -31,5 +31,6 @@
       "@/*": ["./src/*"],
       "agentara": ["./src/index.ts"]
     }
-  }
+  },
+  "exclude": ["web"]
 }

@@ -27,5 +27,5 @@ Configure the environment variables to your liking.
 |----------|-------------|---------|
 | `AGENTARA_HOME` | User home directory | `~/.agentara` |
 | `AGENTARA_LOG_LEVEL` | Log level | `info` |
-| `AGENTARA_SERVICE_PORT` | Service port | `1943` |
+| `AGENTARA_SERVICE_PORT` | Service port | `1984` |
 | `AGENTARA_SERVICE_HOST` | Service host | `localhost` |

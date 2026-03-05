@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig(
   // 1. Ignore directories
   {
-    ignores: ["dist/**", "node_modules/**"],
+    ignores: ["dist/**", "node_modules/**", "web/**"],
   },
 
   // 2. Basic ESLint rules for JavaScript

@@ -72,7 +72,7 @@ Lazy-creation singleton. Loaded by BootLoader after integrity verification.
 - **SessionManager**: Creates or resumes sessions
 - **TaskDispatcher**: Queues, routes, and executes tasks via Bunqueue
 - **start()**: Starts the task dispatcher worker
-- Access via `Kernel.getInstance()` (throws if not initialized)
+- Access instance via `kernel` from `@/src/kernel`
 
 ---
 

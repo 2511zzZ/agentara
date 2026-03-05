@@ -1,8 +1,10 @@
 import {
+  createLogger,
   extractTextContent,
-  logger,
   type InboundMessageTaskPayload,
 } from "@/shared";
+
+import { HonoServer } from "../server";
 
 import { SessionManager } from "./sessioning";
 import { TaskDispatcher } from "./tasking";
@@ -11,30 +13,16 @@ import { TaskDispatcher } from "./tasking";
  * The kernel is the main entry point for the agentara application.
  * Lazy-creation singleton: the instance is created on first `getInstance()`.
  */
-export class Kernel {
-  private static _instance: Kernel | null = null;
-
+class Kernel {
   private _sessionManager!: SessionManager;
   private _taskDispatcher!: TaskDispatcher;
+  private _honoServer!: HonoServer;
+  private _logger = createLogger("kernel");
 
-  static __internalInitialize() {
-    if (Kernel._instance === null) {
-      Kernel._instance = new Kernel();
-    } else {
-      throw new Error("Kernel already initialized");
-    }
-  }
-
-  static getInstance(): Kernel {
-    if (Kernel._instance === null) {
-      throw new Error("Kernel not initialized");
-    }
-    return Kernel._instance;
-  }
-
-  private constructor() {
+  constructor() {
     this._initSessionManager();
     this._initTaskDispatcher();
+    this._initServer();
   }
 
   get sessionManager(): SessionManager {
@@ -45,8 +33,16 @@ export class Kernel {
     return this._taskDispatcher;
   }
 
+  get honoServer(): HonoServer {
+    return this._honoServer;
+  }
+
   private _initSessionManager(): void {
     this._sessionManager = new SessionManager();
+  }
+
+  private _initServer(): void {
+    this._honoServer = new HonoServer();
   }
 
   private _initTaskDispatcher(): void {
@@ -59,7 +55,9 @@ export class Kernel {
    * Start the kernel.
    */
   async start(): Promise<void> {
-    this._taskDispatcher.start();
+    await this._sessionManager.start();
+    await this._taskDispatcher.start();
+    await this._honoServer.start();
   }
 
   private _inboundMessageHandler = async (
@@ -68,7 +66,7 @@ export class Kernel {
     const sessionId = payload.session_id;
     const session = await this._sessionManager.resolveSession(sessionId);
     const inboundMessage = payload.message;
-    logger.info(
+    this._logger.info(
       {
         session_id: sessionId,
         inbound_message: extractTextContent(inboundMessage),
@@ -76,7 +74,7 @@ export class Kernel {
       "inbound_message handler executing",
     );
     const outboundMessage = await session.run(inboundMessage);
-    logger.info(
+    this._logger.info(
       {
         session_id: sessionId,
         inbound_message: extractTextContent(inboundMessage),
@@ -86,3 +84,5 @@ export class Kernel {
     );
   };
 }
+
+export const kernel = new Kernel();

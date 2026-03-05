@@ -118,7 +118,7 @@ export class TaskDispatcher {
   /**
    * Start the worker. Must be called once during app startup.
    */
-  start(): void {
+  async start() {
     this._worker = new Worker<TaskPayload>(
       QUEUE_NAME,
       (job) => this._processJob(job),
@@ -138,8 +138,7 @@ export class TaskDispatcher {
       this._logger.error({ err }, "worker error");
     });
     this._logger.info(
-      { concurrency: this._concurrency },
-      "task dispatcher started",
+      "Task dispatcher started with concurrency: " + this._concurrency,
     );
   }
 
