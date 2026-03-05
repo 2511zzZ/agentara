@@ -8,22 +8,46 @@ import { createLogger } from "@/shared";
 import { healthRoutes, sessionRoutes, taskRoutes } from "./routes";
 
 /**
+ * Creates the Hono app with all API routes mounted.
+ *
+ * Extracted as a standalone function so TypeScript can infer the full
+ * chained route type, which is then exported as {@link AppType} for
+ * use with Hono's RPC client (`hc<AppType>`).
+ */
+function createApp() {
+  return new Hono()
+    .route("/api", healthRoutes)
+    .route("/api/sessions", sessionRoutes)
+    .route("/api/tasks", taskRoutes);
+}
+
+/**
+ * The fully-typed Hono app, including all mounted route signatures.
+ *
+ * Use with `hc<AppType>` on the client side for end-to-end type safety.
+ */
+export type AppType = ReturnType<typeof createApp>;
+
+/**
  * The HTTP server wrapping Hono, started and stopped by the Kernel.
  *
  * Serves RESTful API routes under `/api` and, in production mode,
  * static files from the built React SPA at `web/dist/`.
  */
 export class HonoServer {
-  private _app: Hono;
+  private _app: AppType;
   private _server: Server<undefined> | undefined;
   private _logger: Logger;
 
   constructor() {
     this._logger = createLogger("hono-server");
-    this._app = new Hono();
+    this._app = createApp();
     this._setupMiddleware();
-    this._setupRoutes();
     this._setupStaticServing();
+  }
+
+  get app(): AppType {
+    return this._app;
   }
 
   /**
@@ -61,12 +85,6 @@ export class HonoServer {
 
   private _setupMiddleware(): void {
     this._app.use("/api/*");
-  }
-
-  private _setupRoutes(): void {
-    this._app.route("/api", healthRoutes);
-    this._app.route("/api/sessions", sessionRoutes);
-    this._app.route("/api/tasks", taskRoutes);
   }
 
   private _setupStaticServing(): void {
