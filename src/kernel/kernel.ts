@@ -1,3 +1,4 @@
+import { Database } from "@/data";
 import {
   createLogger,
   extractTextContent,
@@ -7,22 +8,30 @@ import {
 import { HonoServer } from "../server";
 
 import { SessionManager } from "./sessioning";
+import * as sessioningSchema from "./sessioning/data";
 import { TaskDispatcher } from "./tasking";
+import * as taskingSchema from "./tasking/data";
 
 /**
  * The kernel is the main entry point for the agentara application.
  * Lazy-creation singleton: the instance is created on first `getInstance()`.
  */
 class Kernel {
+  private _database!: Database;
   private _sessionManager!: SessionManager;
   private _taskDispatcher!: TaskDispatcher;
   private _honoServer!: HonoServer;
   private _logger = createLogger("kernel");
 
   constructor() {
+    this._initDatabase();
     this._initSessionManager();
     this._initTaskDispatcher();
     this._initServer();
+  }
+
+  get database(): Database {
+    return this._database;
   }
 
   get sessionManager(): SessionManager {
@@ -37,8 +46,12 @@ class Kernel {
     return this._honoServer;
   }
 
+  private _initDatabase(): void {
+    this._database = new Database({ ...taskingSchema, ...sessioningSchema });
+  }
+
   private _initSessionManager(): void {
-    this._sessionManager = new SessionManager();
+    this._sessionManager = new SessionManager(this._database.db);
   }
 
   private _initServer(): void {
@@ -46,8 +59,9 @@ class Kernel {
   }
 
   private _initTaskDispatcher(): void {
-    // TODO: Add task dispatcher configuration
-    this._taskDispatcher = new TaskDispatcher();
+    this._taskDispatcher = new TaskDispatcher({
+      db: this._database.db,
+    });
     this._taskDispatcher.route("inbound_message", this._inboundMessageHandler);
   }
 

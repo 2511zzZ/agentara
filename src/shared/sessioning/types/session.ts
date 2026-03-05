@@ -1,0 +1,23 @@
+import { z } from "zod";
+
+/**
+ * A persisted session record that tracks session metadata.
+ *
+ * Message content lives in `.jsonl` files — this entity only represents
+ * the session envelope (who, where, when).
+ */
+export const Session = z.object({
+  /** Unique session identifier. */
+  id: z.string(),
+  /** The agent runner type, e.g. `"claude-code"`. */
+  agent_type: z.string(),
+  /** Working directory the session was created with. */
+  cwd: z.string(),
+  /** Epoch milliseconds of the most recent message, or null if no messages yet. */
+  last_message_created_at: z.number().nullable(),
+  /** Epoch milliseconds when the session was created. */
+  created_at: z.number(),
+  /** Epoch milliseconds when the session was last updated. */
+  updated_at: z.number(),
+});
+export interface Session extends z.infer<typeof Session> {}

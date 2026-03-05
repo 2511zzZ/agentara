@@ -27,7 +27,6 @@ class BootLoader {
     if (!existsSync(config.paths.data)) {
       mkdirSync(config.paths.data, { recursive: true });
     }
-    process.env.DATA_PATH = config.paths.resolveDataFilePath("bunqueue.db");
   }
 
   private async _igniteKernel(): Promise<void> {

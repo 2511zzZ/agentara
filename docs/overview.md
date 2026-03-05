@@ -181,6 +181,7 @@ src/
 │   ├── agents/       # createAgentRunner factory
 │   ├── sessioning/   # Session, SessionManager
 │   └── tasking/      # TaskDispatcher
+├── server/      # Hono server (RESTful API)
 ├── community/   # Provider implementations (one subdir per provider)
 │   └── anthropic/    # ClaudeAgentRunner, etc.
 └── boot-loader/   # Bootstrap → verify integrity → ignite Kernel

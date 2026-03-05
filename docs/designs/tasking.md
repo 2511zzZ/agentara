@@ -20,7 +20,7 @@ TaskDispatcher
 ```
 
 - **Queue name**: `agentara:tasks`
-- **Backend**: Bunqueue in embedded mode; database at `$AGENTARA_HOME/data/main.db`
+- **Backend**: Bunqueue in embedded mode; database at `$AGENTARA_HOME/data/agentara.db`
 
 ## Task Payload Schema
 

@@ -1,9 +1,12 @@
 import * as readline from "node:readline/promises";
 
+import { Database } from "@/data";
 import { SessionManager } from "@/kernel/sessioning";
+import * as sessioningSchema from "@/kernel/sessioning/data";
 import { logger, type UserMessage, uuid } from "@/shared";
 
-const sessionManager = new SessionManager();
+const database = new Database({ ...sessioningSchema });
+const sessionManager = new SessionManager(database.db);
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,

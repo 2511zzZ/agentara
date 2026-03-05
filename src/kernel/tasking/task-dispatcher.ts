@@ -1,10 +1,17 @@
 import type { Job } from "bunqueue/client";
 import { Queue, Worker } from "bunqueue/client";
+import { desc, eq } from "drizzle-orm";
 
-import type { CronjobTaskPayload, TaskPayload, Logger } from "@/shared";
+import type { DrizzleDB } from "@/data";
+import type { CronjobTaskPayload, Task, TaskPayload, Logger } from "@/shared";
 import { config, createLogger } from "@/shared";
 
+import { tasks } from "./data";
+
 const QUEUE_NAME = "agentara:tasks";
+
+/** Scheduler info type extracted from the bunqueue Queue API. */
+type SchedulerInfo = Awaited<ReturnType<Queue["getJobSchedulers"]>>[number];
 
 /**
  * A function that processes a task payload of a specific type.
@@ -24,6 +31,11 @@ export interface TaskDispatcherOptions {
    * Controls cross-session parallelism. Defaults to 4.
    */
   concurrency?: number;
+
+  /**
+   * The Drizzle database instance used to persist task lifecycle.
+   */
+  db: DrizzleDB;
 }
 
 /**
@@ -36,6 +48,7 @@ export interface TaskDispatcherOptions {
  */
 export class TaskDispatcher {
   private _concurrency: number;
+  private _db: DrizzleDB;
   private _queue: Queue<TaskPayload>;
   private _worker: Worker<TaskPayload> | undefined;
   private _handlers: Map<string, TaskHandler>;
@@ -43,8 +56,9 @@ export class TaskDispatcher {
   private _sessionLocks: Map<string, Promise<void>>;
   private _logger: Logger;
 
-  constructor(options?: TaskDispatcherOptions) {
-    this._concurrency = options?.concurrency ?? 4;
+  constructor(options: TaskDispatcherOptions) {
+    this._concurrency = options.concurrency ?? 4;
+    this._db = options.db;
     this._handlers = new Map();
     this._sessionLocks = new Map();
     this._logger = createLogger("task-dispatcher");
@@ -85,6 +99,18 @@ export class TaskDispatcher {
    */
   async dispatch(payload: TaskPayload): Promise<string> {
     const job = await this._queue.add(payload.type, payload);
+    const now = Date.now();
+    this._db
+      .insert(tasks)
+      .values({
+        id: job.id,
+        type: payload.type,
+        status: "pending",
+        payload,
+        created_at: now,
+        updated_at: now,
+      })
+      .run();
     return job.id;
   }
 
@@ -113,6 +139,30 @@ export class TaskDispatcher {
   async removeCronjob(sessionId: string): Promise<void> {
     await this._queue.removeJobScheduler(sessionId);
     this._logger.info({ session_id: sessionId }, "cronjob removed");
+  }
+
+  /**
+   * Query tasks across every state, sorted by creation time descending.
+   * Unlike bunqueue's in-memory query, this reads from the persisted
+   * `tasks` table and survives process restarts.
+   * @param limit - Maximum number of tasks to return. Defaults to 50.
+   * @returns An array of tasks in reverse chronological order.
+   */
+  queryTasks({ limit = 50 }: { limit?: number } = {}): Task[] {
+    return this._db
+      .select()
+      .from(tasks)
+      .orderBy(desc(tasks.created_at))
+      .limit(limit)
+      .all() as Task[];
+  }
+
+  /**
+   * Get all registered cronjob schedulers.
+   * @returns An array of scheduler info for every active cronjob.
+   */
+  async getCronjobs(): Promise<SchedulerInfo[]> {
+    return this._queue.getJobSchedulers();
   }
 
   /**
@@ -172,9 +222,13 @@ export class TaskDispatcher {
         );
         return;
       }
+      this._updateTaskStatus(job.id, "running");
       try {
         await handler(payload);
+        await job.updateProgress(100);
+        this._updateTaskStatus(job.id, "completed");
       } catch (err) {
+        this._updateTaskStatus(job.id, "failed");
         this._logger.error(
           { session_id: sessionId, type: payload.type, err },
           "task failed",
@@ -189,5 +243,16 @@ export class TaskDispatcher {
     if (this._sessionLocks.get(sessionId) === current) {
       this._sessionLocks.delete(sessionId);
     }
+  }
+
+  /**
+   * Update the status of a task in the database.
+   */
+  private _updateTaskStatus(id: string, status: string): void {
+    this._db
+      .update(tasks)
+      .set({ status, updated_at: Date.now() })
+      .where(eq(tasks.id, id))
+      .run();
   }
 }

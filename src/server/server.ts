@@ -5,7 +5,7 @@ import { serveStatic } from "hono/bun";
 import type { Logger } from "@/shared";
 import { createLogger } from "@/shared";
 
-import { healthRoutes, taskRoutes } from "./routes";
+import { healthRoutes, sessionRoutes, taskRoutes } from "./routes";
 
 /**
  * The HTTP server wrapping Hono, started and stopped by the Kernel.
@@ -65,6 +65,7 @@ export class HonoServer {
 
   private _setupRoutes(): void {
     this._app.route("/api", healthRoutes);
+    this._app.route("/api/sessions", sessionRoutes);
     this._app.route("/api/tasks", taskRoutes);
   }
 
