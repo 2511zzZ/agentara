@@ -8,7 +8,7 @@ import { sessions } from "./data";
 import { Session } from "./session";
 import {
   SessionDailyLogWriter,
-  SessionFileWriter,
+  SessionJSONLWriter,
   SessionLogWriter,
 } from "./writers";
 
@@ -182,7 +182,7 @@ export class SessionManager {
   }
 
   private _attachWriter(session: Session, sessionId: string): void {
-    const fileWriter = new SessionFileWriter(sessionId);
+    const fileWriter = new SessionJSONLWriter(sessionId);
     const logWriter = new SessionLogWriter(sessionId);
     session.on("message", (message) => {
       logWriter.write(message);

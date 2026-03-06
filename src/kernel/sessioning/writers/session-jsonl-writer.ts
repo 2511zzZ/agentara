@@ -8,7 +8,7 @@ import { appendFile, ensureFile } from "./session-writer-utils";
  * Appends message as JSON line to session .jsonl file.
  * Records every message (user, assistant, system) without filtering.
  */
-export class SessionFileWriter implements SessionWriter {
+export class SessionJSONLWriter implements SessionWriter {
   constructor(
     readonly sessionId: string,
     path?: string,
