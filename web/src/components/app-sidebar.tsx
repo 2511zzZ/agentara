@@ -1,7 +1,11 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import type { Session } from "agentara";
 import Avatar from "boring-avatars";
-import { BrainCircuit, ListTodo, MessageSquare } from "lucide-react";
+import {
+  BrainCircuitIcon,
+  ListTodoIcon,
+  MessagesSquareIcon,
+} from "lucide-react";
 
 import { useSessions } from "@/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,9 +27,9 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { title: "Sessions", icon: MessageSquare, to: "/sessions" },
-  { title: "Tasks", icon: ListTodo, to: "/tasks" },
-  { title: "Memory", icon: BrainCircuit, to: "/memory" },
+  { title: "Sessions", icon: MessagesSquareIcon, to: "/sessions" },
+  { title: "Tasks", icon: ListTodoIcon, to: "/tasks" },
+  { title: "Memory", icon: BrainCircuitIcon, to: "/memory" },
 ] as const;
 
 function NavSidebarGroup() {
@@ -98,7 +102,6 @@ function RecentsSidebarGroup({
                     to="/sessions/$sessionId"
                     params={{ sessionId: session.id }}
                   >
-                    <MessageSquare />
                     <span className="truncate">{session.first_message}</span>
                   </Link>
                 </SidebarMenuButton>

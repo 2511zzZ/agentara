@@ -16,6 +16,7 @@
     "@tanstack/react-router": "^1.166.2",
     "boring-avatars": "^2.0.4",
     "class-variance-authority": "^0.7.1",
+    "dayjs": "^1.11.19",
     "clsx": "^2.1.1",
     "hono": "^4.12.5",
     "lucide-react": "^0.577.0",
