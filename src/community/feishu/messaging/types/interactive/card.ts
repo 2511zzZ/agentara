@@ -45,5 +45,5 @@ export interface Card {
   schema: "2.0";
   config?: CardConfig;
   head?: CardHead;
-  body?: CardBody;
+  body: CardBody;
 }

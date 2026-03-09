@@ -15,6 +15,20 @@
       "when": 1772786460888,
       "tag": "0001_talented_otto_octavius",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773070124640,
+      "tag": "0002_needy_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1773071035852,
+      "tag": "0003_pale_lila_cheney",
+      "breakpoints": true
     }
   ]
 }

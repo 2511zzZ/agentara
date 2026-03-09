@@ -1,19 +1,24 @@
 import type EventEmitter from "eventemitter3";
 
+import type { MessageChannel } from "./message-channel";
 import type { AssistantMessage, UserMessage } from "./types";
 
-/** Event types emitted by a message channel. */
-export interface MessageChannelEventTypes {
+/** Event types emitted by a message gateway. */
+export interface MessageGatewayEventTypes {
   // eslint-disable-next-line no-unused-vars
   "message:inbound": (message: UserMessage) => void;
 }
 
-/** Abstract message channel for sending and receiving messages. */
-export interface MessageChannel extends EventEmitter {
-  /** Channel type identifier (e.g. "feishu"). */
-  readonly type: string;
+/**
+ * A gateway that manages multiple message channels, routes outbound messages
+ * to the correct channel, and emits unified inbound events.
+ */
+export interface MessageGateway extends EventEmitter<MessageGatewayEventTypes> {
+  /** Register a message channel with the gateway. */
+  // eslint-disable-next-line no-unused-vars
+  registerChannel(channel: MessageChannel): void;
 
-  /** Start the channel and begin listening for inbound messages. */
+  /** Start the gateway and all registered channels. */
   start(): Promise<void>;
 
   /**

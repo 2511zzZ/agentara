@@ -6,7 +6,6 @@ import type {
   GrepToolUseMessageContent,
   ReadToolUseMessageContent,
   SkillToolUseMessageContent,
-  ToolSearchToolUseMessageContent,
   ToolUseMessageContent,
   WebFetchToolUseMessageContent,
   WebSearchToolUseMessageContent,
@@ -20,6 +19,12 @@ import type {
   MarkdownElement,
 } from "./types";
 
+/**
+ * Render assistant message content as a Feishu interactive card.
+ * @param messageContent - Array of content blocks (thinking, tool_use, text).
+ * @param options - Rendering options (streaming mode).
+ * @returns Feishu Card object for API payload.
+ */
 export function renderMessageCard(
   messageContent: AssistantMessage["content"],
   { streaming }: { streaming: boolean },
@@ -28,7 +33,7 @@ export function renderMessageCard(
     tag: "collapsible_panel",
     expanded: streaming,
     border: {
-      color: "grey",
+      color: "grey-300",
       corner_radius: "6px",
     },
     vertical_spacing: "2px",
@@ -79,10 +84,8 @@ export function renderMessageCard(
         content: lastContent.text,
       };
       card.config!.summary.content = lastContent.text;
-      card.body!.elements.push(resultElement);
+      card.body.elements.push(resultElement);
     }
-  } else {
-    card.config!.summary.content = "Working on it...";
   }
 
   const stepCount = stepPanel.elements.length;
@@ -91,15 +94,39 @@ export function renderMessageCard(
       stepCount + " " + (stepCount === 1 ? "step" : "steps");
     if (streaming) {
       stepPanel.header.title.content = `Working on it (${stepCountText})`;
+      card.config!.summary.content = `Working on it (${stepCountText})`;
     } else {
       stepPanel.header.title.content = `Show ${stepCountText}`;
     }
   } else {
-    delete card.body!.elements[0];
+    // No steps, remove the collapsible panel if it exists
+    if (card.body.elements[0]?.tag === "collapsible_panel") {
+      card.body.elements.splice(0, 1);
+    }
+    if (card.body.elements.length === 0) {
+      card.body.elements.push({
+        tag: "div",
+        text: {
+          tag: "plain_text",
+          content: "",
+        },
+      });
+    }
+  }
+  if (streaming) {
+    card.body.elements.push({
+      tag: "div",
+      icon: {
+        tag: "standard_icon",
+        token: "more_outlined",
+        color: "grey",
+      },
+    });
   }
   return card;
 }
 
+/** Render a single tool use step into the collapsible panel. */
 function renderTool(
   content: ToolUseMessageContent,
   stepPanel: CollapsiblePanel,
@@ -188,13 +215,15 @@ function renderTool(
       );
       break;
     case "ToolSearch":
-      const toolSearchContent = content as ToolSearchToolUseMessageContent;
-      stepPanel.elements.push(
-        renderStep(
-          `Search tools for "${toolSearchContent.input.query}"`,
-          "search_outlined",
-        ),
-      );
+      // Ignore ToolSearch for now
+      //
+      // const toolSearchContent = content as ToolSearchToolUseMessageContent;
+      // stepPanel.elements.push(
+      //   renderStep(
+      //     `Search tools for "${toolSearchContent.input.query}"`,
+      //     "search_outlined",
+      //   ),
+      // );
       break;
     default:
       stepPanel.elements.push(
@@ -203,6 +232,7 @@ function renderTool(
   }
 }
 
+/** Create a step element (icon + text) for the collapsible panel. */
 function renderStep(text: string, iconToken: string): DivElement {
   return {
     tag: "div",

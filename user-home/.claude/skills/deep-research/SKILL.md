@@ -175,3 +175,9 @@ After completing research, you should have:
 5. Current trends and relevant context
 
 **Only then proceed to content generation**, using the gathered information to create high-quality, well-informed content.
+
+## Notes
+
+- Limit the number of research steps to 20.
+- Limit the number of tables in your response to 3.
+- Output your final result not in a file, but in the message body, unless the user requests a file.

@@ -1,10 +1,12 @@
 import { FeishuMessageChannel } from "@/community/feishu";
+import * as feishuMessagingSchema from "@/community/feishu/messaging/data";
 import { DataConnection } from "@/data";
-import type { AssistantMessage, MessageChannel, UserMessage } from "@/shared";
+import type { AssistantMessage, UserMessage } from "@/shared";
 import { createLogger, type InboundMessageTaskPayload } from "@/shared";
 
 import { HonoServer } from "../server";
 
+import { MultiChannelMessageGateway } from "./messaging";
 import { SessionManager } from "./sessioning";
 import * as sessioningSchema from "./sessioning/data";
 import { TaskDispatcher } from "./tasking";
@@ -19,14 +21,14 @@ class Kernel {
   private _database!: DataConnection;
   private _sessionManager!: SessionManager;
   private _taskDispatcher!: TaskDispatcher;
-  private _messageChannel!: MessageChannel;
+  private _messageGateway!: MultiChannelMessageGateway;
   private _honoServer!: HonoServer;
 
   constructor() {
     this._initDatabase();
     this._initSessionManager();
     this._initTaskDispatcher();
-    this._initMessageChannel();
+    this._initMessageGateway();
     this._initServer();
   }
 
@@ -50,6 +52,7 @@ class Kernel {
     this._database = new DataConnection({
       ...taskingSchema,
       ...sessioningSchema,
+      ...feishuMessagingSchema,
     });
   }
 
@@ -71,9 +74,12 @@ class Kernel {
     );
   }
 
-  private _initMessageChannel(): void {
-    this._messageChannel = new FeishuMessageChannel();
-    this._messageChannel.on("message:inbound", this._handleInboundMessage);
+  private _initMessageGateway(): void {
+    this._messageGateway = new MultiChannelMessageGateway(this._database.db);
+    this._messageGateway.registerChannel(
+      new FeishuMessageChannel(undefined, this._database.db),
+    );
+    this._messageGateway.on("message:inbound", this._handleInboundMessage);
   }
 
   /**
@@ -83,7 +89,7 @@ class Kernel {
     await this._sessionManager.start();
     await this._taskDispatcher.start();
     await this._honoServer.start();
-    await this._messageChannel.start();
+    await this._messageGateway.start();
   }
 
   private _handleInboundMessage = async (message: UserMessage) => {
@@ -102,6 +108,7 @@ class Kernel {
     const inboundMessage = payload.message;
     const session = await this._sessionManager.resolveSession(sessionId, {
       firstMessage: inboundMessage,
+      channelType: inboundMessage.channel_type,
     });
     let contents: AssistantMessage["content"] = [
       {
@@ -109,7 +116,7 @@ class Kernel {
         thinking: "Thinking...",
       },
     ];
-    const outboundMessage = await this._messageChannel.replyMessage(
+    const outboundMessage = await this._messageGateway.replyMessage(
       inboundMessage.id,
       {
         role: "assistant",
@@ -126,9 +133,8 @@ class Kernel {
     for await (const message of stream) {
       if (message.role === "assistant") {
         contents.push(...message.content);
-        await this._messageChannel.updateMessageContent(
-          outboundMessage.id,
-          contents,
+        await this._messageGateway.updateMessageContent(
+          { ...outboundMessage, content: contents },
           {
             streaming: true,
           },
@@ -139,9 +145,8 @@ class Kernel {
     if (!lastMessage) {
       throw new Error("No assistant message received from the agent.");
     }
-    await this._messageChannel.updateMessageContent(
-      outboundMessage.id,
-      contents,
+    await this._messageGateway.updateMessageContent(
+      { ...outboundMessage, content: contents },
       {
         streaming: false,
       },

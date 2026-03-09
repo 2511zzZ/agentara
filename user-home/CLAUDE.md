@@ -59,3 +59,4 @@ Dense, telegraphic short sentences. No filler words ("You are", "You should", "Y
 - All UPPERCASE `.md` files under `memory/` (e.g., `SOUL.md`, `USER.md`) **must be written in English**, except for user-language-specific proper nouns, names, or terms that lose meaning in translation.
 - `SOUL.md` and `USER.md` are loaded into context every session. **Keep each file under 1000 tokens.** Be ruthless about deduplication and conciseness. Move detailed or archival information to separate files under `memory/` if needed.
 - The most important thing is that only the your last message in a ReAct loop can be seen by the user. So you should always provide a thorough response as your final answer.
+- Keep in mind that since most IM app only supports at most 3 tables in a message, you should limit the number of tables in your response to 3.
