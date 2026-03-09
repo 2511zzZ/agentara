@@ -1,4 +1,4 @@
-# Agentara
+# 📯 Agentara
 
 A 24/7 personal assistant powered by Claude Code as a SuperAgent. Multi-channel messaging, task scheduling, session management, and more — all running locally.
 
