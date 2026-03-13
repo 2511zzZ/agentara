@@ -1,0 +1,1 @@
+ALTER TABLE `feishu_threads` DROP COLUMN `channel_type`;

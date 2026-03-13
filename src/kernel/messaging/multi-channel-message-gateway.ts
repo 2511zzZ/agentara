@@ -15,7 +15,7 @@ import { sessions } from "../sessioning/data";
 
 /**
  * A gateway that manages multiple message channels, routes outbound messages
- * to the correct channel based on session `channel_type`, and emits unified
+ * to the correct channel based on session `channel_id`, and emits unified
  * inbound events.
  */
 export class MultiChannelMessageGateway
@@ -37,22 +37,22 @@ export class MultiChannelMessageGateway
    * @param channel - The message channel to register.
    */
   registerChannel(channel: MessageChannel): void {
-    if (this._channels.has(channel.type)) {
-      throw new Error(`Channel type "${channel.type}" is already registered.`);
+    if (this._channels.has(channel.id)) {
+      throw new Error(`Channel id "${channel.id}" is already registered.`);
     }
-    this._channels.set(channel.type, channel);
+    this._channels.set(channel.id, channel);
     channel.on("message:inbound", (message: UserMessage) => {
-      this._handleInboundMessage(channel.type, message);
+      this._handleInboundMessage(channel.id, message);
     });
-    this._logger.info(`Registered channel: ${channel.type}`);
+    this._logger.info(`Registered channel: ${channel.id}`);
   }
 
   /**
    * Start the gateway and all registered channels.
    */
   async start(): Promise<void> {
-    for (const [type, channel] of this._channels) {
-      this._logger.info(`Starting channel: ${type}`);
+    for (const [id, channel] of this._channels) {
+      this._logger.info(`Starting channel: ${id}`);
       await channel.start();
     }
     this._logger.info("Message gateway started");
@@ -60,7 +60,7 @@ export class MultiChannelMessageGateway
 
   /**
    * Post a new assistant message without replying to an existing message.
-   * Routes to the correct channel based on session `channel_type`.
+   * Routes to the correct channel based on session `channel_id`.
    * @param message - The assistant message to post (without id).
    * @returns The posted message with id assigned.
    */
@@ -74,7 +74,7 @@ export class MultiChannelMessageGateway
 
   /**
    * Reply to an existing message.
-   * Routes to the correct channel based on session `channel_type`.
+   * Routes to the correct channel based on session `channel_id`.
    * @param messageId - ID of the message to reply to.
    * @param message - The assistant message to send (without id).
    * @param options - Optional settings (e.g. streaming mode).
@@ -92,7 +92,7 @@ export class MultiChannelMessageGateway
 
   /**
    * Update the content of an existing message.
-   * Routes to the correct channel based on session `channel_type`.
+   * Routes to the correct channel based on session `channel_id`.
    * @param message - The assistant message with updated content.
    * @param options - Optional settings (e.g. streaming mode).
    */
@@ -105,50 +105,51 @@ export class MultiChannelMessageGateway
   }
 
   /**
-   * Handles an inbound message from a channel: sets the channel_type on the
+   * Handles an inbound message from a channel: sets the channel_id on the
    * message and re-emits `message:inbound`.
    */
   private _handleInboundMessage(
-    channelType: string,
+    channelId: string,
     message: UserMessage,
   ): void {
-    message.channel_type = channelType;
+    message.channel_id = channelId;
     this.emit("message:inbound", message);
   }
 
   /**
-   * Resolves the correct channel for a session by querying the `channel_type`
-   * column from the sessions table.
+   * Resolves the correct channel for a session by querying the `channel_id`
+   * from the sessions table.
    * @param sessionId - The session identifier.
    * @returns The matching MessageChannel.
-   * @throws If the session has no channel_type or the channel is not registered.
+   * @throws If the session has no channel_id or the channel is not registered.
    */
   private _resolveChannelForSession(sessionId: string): MessageChannel {
     const row = this._db
-      .select({ channel_type: sessions.channel_type })
+      .select({ channel_id: sessions.channel_id })
       .from(sessions)
       .where(eq(sessions.id, sessionId))
       .get();
 
-    if (!row?.channel_type) {
+    const channelId = row?.channel_id;
+    if (!channelId) {
       throw new Error(
-        `Cannot resolve channel for session "${sessionId}": no channel_type set.`,
+        `Cannot resolve channel for session "${sessionId}": no channel_id set.`,
       );
     }
 
-    return this._resolveChannel(row.channel_type);
+    return this._resolveChannel(channelId);
   }
 
   /**
-   * Looks up a registered channel by type.
-   * @param channelType - The channel type identifier.
+   * Looks up a registered channel by id.
+   * @param channelId - The channel identifier.
    * @returns The matching MessageChannel.
-   * @throws If the channel type is not registered.
+   * @throws If the channel is not registered.
    */
-  private _resolveChannel(channelType: string): MessageChannel {
-    const channel = this._channels.get(channelType);
+  private _resolveChannel(channelId: string): MessageChannel {
+    const channel = this._channels.get(channelId);
     if (!channel) {
-      throw new Error(`Channel type "${channelType}" is not registered.`);
+      throw new Error(`Channel "${channelId}" is not registered.`);
     }
     return channel;
   }

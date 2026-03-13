@@ -10,6 +10,9 @@ export interface MessageChannelEventTypes {
 
 /** Abstract message channel for sending and receiving messages. */
 export interface MessageChannel extends EventEmitter {
+  /** Channel ID. */
+  readonly id: string;
+
   /** Channel type identifier (e.g. "feishu"). */
   readonly type: string;
 

@@ -8,7 +8,7 @@ describe("Session", () => {
     id: "sess-1",
     agent_type: "claude-code",
     cwd: "/home/user/project",
-    channel_type: "feishu",
+    channel_id: "ch-1",
     first_message: "hello",
     last_message_created_at: now,
     created_at: now,
@@ -19,17 +19,17 @@ describe("Session", () => {
     const result = Session.parse(validSession);
     expect(result.id).toBe("sess-1");
     expect(result.agent_type).toBe("claude-code");
-    expect(result.channel_type).toBe("feishu");
+    expect(result.channel_id).toBe("ch-1");
   });
 
   test("accepts null for nullable fields", () => {
     const input = {
       ...validSession,
-      channel_type: null,
+      channel_id: null,
       last_message_created_at: null,
     };
     const result = Session.parse(input);
-    expect(result.channel_type).toBeNull();
+    expect(result.channel_id).toBeNull();
     expect(result.last_message_created_at).toBeNull();
   });
 

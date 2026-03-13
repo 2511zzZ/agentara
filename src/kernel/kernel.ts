@@ -83,9 +83,11 @@ class Kernel {
 
   private _initMessageGateway(): void {
     this._messageGateway = new MultiChannelMessageGateway(this._database.db);
-    this._messageGateway.registerChannel(
-      new FeishuMessageChannel(undefined, this._database.db),
-    );
+    for (const channel of config.messaging.channels) {
+      this._messageGateway.registerChannel(
+        new FeishuMessageChannel(channel.id, channel.params, this._database.db),
+      );
+    }
     this._messageGateway.on("message:inbound", this._handleInboundMessage);
   }
 
@@ -114,7 +116,7 @@ class Kernel {
   ) => {
     const inboundMessage = payload.message;
     const session = await this._sessionManager.resolveSession(sessionId, {
-      channelType: inboundMessage.channel_type,
+      channelId: inboundMessage.channel_id,
       firstMessage: inboundMessage,
     });
     let contents: AssistantMessage["content"] = [
@@ -168,11 +170,12 @@ class Kernel {
     const payload_without_instruction: { instruction?: string } = {
       ...payload,
     };
+    const defaultChannelId = config.messaging.default_channel_id;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",
       session_id: sessionId,
-      channel_type: config.messaging.default_channel_type,
+      channel_id: defaultChannelId,
       content: [
         {
           type: "text",
@@ -185,7 +188,7 @@ ${payload.instruction}`,
       ],
     };
     const session = await this._sessionManager.resolveSession(sessionId, {
-      channelType: userMessage.channel_type,
+      channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
     delete payload_without_instruction.instruction;

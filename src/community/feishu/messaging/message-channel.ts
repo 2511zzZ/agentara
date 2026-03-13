@@ -40,6 +40,7 @@ export class FeishuMessageChannel
    * @param db - Drizzle database instance for persisting thread-to-session mappings.
    */
   constructor(
+    readonly id: string,
     readonly config = {
       feishuAppId: Bun.env.FEISHU_APP_ID!,
       feishuAppSecret: Bun.env.FEISHU_APP_SECRET!,
@@ -47,6 +48,7 @@ export class FeishuMessageChannel
     db: DrizzleDB,
   ) {
     super();
+    this.id = id;
     if (!config.feishuAppId || !config.feishuAppSecret) {
       throw new Error("Feishu app ID and secret are required");
     }
@@ -205,7 +207,6 @@ export class FeishuMessageChannel
       .insert(feishuThreads)
       .values({
         thread_id: threadId,
-        channel_type: this.type,
         session_id: sessionId,
         created_at: Date.now(),
       })

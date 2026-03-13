@@ -44,8 +44,8 @@ export interface SystemMessage extends z.infer<typeof SystemMessage> {}
  */
 export const UserMessage = BaseMessage.extend({
   role: z.literal("user"),
-  /** The channel type this message originated from (e.g. "feishu"). */
-  channel_type: z.string().optional(),
+  /** The channel id this message originated from. */
+  channel_id: z.string().optional(),
   content: z.array(
     z.discriminatedUnion("type", [
       TextMessageContent,

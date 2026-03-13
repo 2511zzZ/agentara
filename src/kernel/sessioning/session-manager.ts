@@ -30,9 +30,9 @@ export interface SessionResolveOptions {
   cwd?: string;
 
   /**
-   * The channel type this session belongs to (e.g. "feishu").
+   * The channel id this session belongs to.
    */
-  channelType?: string;
+  channelId?: string;
 
   /**
    * The first message of the session.
@@ -107,7 +107,7 @@ export class SessionManager {
 
     const agentType = options?.agentType ?? config.agents.default.type;
     const cwd = options?.cwd ?? config.paths.home;
-    const channelType = options?.channelType ?? null;
+    const channelId = options?.channelId ?? null;
     const now = Date.now();
 
     this._db
@@ -116,7 +116,7 @@ export class SessionManager {
         id: sessionId,
         agent_type: agentType,
         cwd,
-        channel_type: channelType,
+        channel_id: channelId,
         last_message_created_at: null,
         created_at: now,
         updated_at: now,

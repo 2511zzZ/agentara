@@ -9,7 +9,19 @@ export const config = {
     max_retries: 1,
   },
   messaging: {
-    default_channel_type: "feishu",
+    default_channel_id: "9e3eae94-fe88-4043-af40-e7f88943a370", // Falls back to channels[0]?.id when empty
+    channels: [
+      {
+        id: "9e3eae94-fe88-4043-af40-e7f88943a370",
+        type: "feishu",
+        name: "Tara",
+        description: "Tara's default channel",
+        params: {
+          feishuAppId: Bun.env.FEISHU_APP_ID!,
+          feishuAppSecret: Bun.env.FEISHU_APP_SECRET!,
+        },
+      },
+    ],
   },
   paths,
 };
