@@ -41,26 +41,27 @@ export class FeishuMessageChannel
    */
   constructor(
     readonly id: string,
-    readonly config = {
-      feishuAppId: Bun.env.FEISHU_APP_ID!,
-      feishuAppSecret: Bun.env.FEISHU_APP_SECRET!,
+    readonly config: {
+      chatId: string;
+      appId: string;
+      appSecret: string;
     },
     db: DrizzleDB,
   ) {
     super();
     this.id = id;
-    if (!config.feishuAppId || !config.feishuAppSecret) {
+    if (!config.appId || !config.appSecret) {
       throw new Error("Feishu app ID and secret are required");
     }
     this._db = db;
     this._logger = createLogger("feishu-message-channel");
     this._inboundClient = new WSClient({
-      appId: this.config.feishuAppId,
-      appSecret: this.config.feishuAppSecret,
+      appId: this.config.appId,
+      appSecret: this.config.appSecret,
     });
     this._client = new Client({
-      appId: this.config.feishuAppId,
-      appSecret: this.config.feishuAppSecret,
+      appId: this.config.appId,
+      appSecret: this.config.appSecret,
     });
   }
 
@@ -116,7 +117,7 @@ export class FeishuMessageChannel
         receive_id_type: "chat_id",
       },
       data: {
-        receive_id: "oc_872915c891a9e9c447b3b3f06b8d65f4",
+        receive_id: this.config.chatId,
         msg_type: "interactive",
         content: JSON.stringify(card),
       },
@@ -177,11 +178,7 @@ export class FeishuMessageChannel
   private _handleMessageReceive = async ({
     message: receivedMessage,
   }: MessageReceiveEventData) => {
-    const {
-      message_id: messageId,
-      // chat_id: chatId,
-      thread_id: threadId,
-    } = receivedMessage;
+    const { message_id: messageId, thread_id: threadId } = receivedMessage;
     const session_id = this._resolveSessionId(threadId);
     const userMessage: UserMessage = {
       id: messageId,

@@ -85,7 +85,15 @@ class Kernel {
     this._messageGateway = new MultiChannelMessageGateway(this._database.db);
     for (const channel of config.messaging.channels) {
       this._messageGateway.registerChannel(
-        new FeishuMessageChannel(channel.id, channel.params, this._database.db),
+        new FeishuMessageChannel(
+          channel.id,
+          {
+            chatId: channel.params.chat_id,
+            appId: channel.params.app_id,
+            appSecret: channel.params.app_secret,
+          },
+          this._database.db,
+        ),
       );
     }
     this._messageGateway.on("message:inbound", this._handleInboundMessage);

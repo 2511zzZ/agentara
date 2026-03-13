@@ -17,8 +17,9 @@ export const config = {
         name: "Tara",
         description: "Tara's default channel",
         params: {
-          feishuAppId: Bun.env.FEISHU_APP_ID!,
-          feishuAppSecret: Bun.env.FEISHU_APP_SECRET!,
+          app_id: Bun.env.FEISHU_APP_ID!,
+          app_secret: Bun.env.FEISHU_APP_SECRET!,
+          chat_id: "oc_0571b524e6fe1b7191fd4af3e3fe2a5d",
         },
       },
     ],
