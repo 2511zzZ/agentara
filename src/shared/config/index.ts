@@ -44,7 +44,6 @@ function _loadConfigFromFile(): AppConfig {
  */
 export function reloadConfig(): void {
   _appConfig = _loadConfigFromFile();
-  console.info(_appConfig);
 }
 
 // Attempt initial load — swallow error so boot-loader can use config.paths before yaml exists.
