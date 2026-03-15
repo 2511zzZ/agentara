@@ -28,9 +28,9 @@ export class ClaudeAgentRunner implements AgentRunner {
     const args = [
       "claude",
       ...(!isNew ? ["--resume", sessionId] : ["--session-id", sessionId]),
+      ...["--model", "claude-sonnet-4-6"],
+      ...["--output-format", "stream-json"],
       "--print",
-      "--output-format",
-      "stream-json",
       "--verbose",
       textContentOfUserMessage,
     ];
