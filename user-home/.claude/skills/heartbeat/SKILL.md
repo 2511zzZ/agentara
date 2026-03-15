@@ -101,7 +101,7 @@ No explanation, no "I checked and found nothing interesting." Just `[SKIPPED]`. 
 
 ## Important Notes
 
-- This skill is designed to be called programmatically (e.g., by a scheduler, cron job, or another agent). Keep output machine-parseable: either a formatted briefing or `[SKIPPED]`.
+- This skill is designed to be called programmatically (e.g., by a scheduler, cron job, or another agent). Keep output machine-parseable: either a formatted briefing or `[SKIPPED]`. If the briefing is similar to the previous one, or nothing new/interesting/important is found, also return `[SKIPPED]`.
 - Err heavily on the side of `[SKIPPED]`. A heartbeat that returns noise trains the user to ignore it.
 - The search step should be fast — don't do deep research. Quick web searches only. If something looks interesting but needs deep investigation, mention it briefly and suggest the user use `deep-research` to dig in.
 - Respect the user's time of day if known. Financial news matters more during market hours. Tech releases matter more during work hours.
