@@ -15,10 +15,6 @@ The user's time and attention are sacred. A heartbeat that cries wolf is worse t
 
 Read the user's memory files to build a profile of current interests and concerns:
 
-- `memory/USER.md` — personal context, work focus, investments, travel plans, daily habits
-- `memory/SOUL.md` — identity, growth goals, lessons learned
-- Any other `.md` files under `memory/` that might contain recent context
-
 Extract a prioritized list of **watchlist topics**. Typical categories:
 
 | Category | Examples | Alert Threshold |
@@ -30,7 +26,16 @@ Extract a prioritized list of **watchlist topics**. Typical categories:
 | **Upcoming events** | Travel plans, deadlines | Weather alerts, schedule changes, booking reminders within 7 days |
 | **Personal interests** | Photography gear, anime, content creation | Notable releases or events only (not routine content) |
 
-## Step 2: Search
+## Step 2: Read News
+
+Read the latest news from the following sources:
+- [Hacker News](https://hnrss.org/newest)
+- [Product Hunt](https://www.producthunt.com/feed)
+- [Google News](https://news.google.com/rss?hl=zh-CN&gl=CN&ceid=CN:zh-Hans)
+
+Find the most relevant news for the user's profile and watchlist topics.
+
+## Step 3: Search
 
 For each high-priority watchlist topic (aim for 3-5 topics, no more than 8), perform a focused web search. Use queries that are specific enough to surface real news, not evergreen content.
 
@@ -42,11 +47,11 @@ Good search patterns:
 
 Skip topics where nothing meaningful could have changed since the last check (e.g., stable personal preferences, unchanging habits).
 
-## Step 3: Evaluate — The "Worth Interrupting" Test
+## Step 4: Evaluate — The "Worth Interrupting" Test
 
 For each finding, apply this filter:
 
-1. **Is it new?** (not something the user already knows from memory)
+1. **Is it today's news?** (not something the user already knows from memory or the previous briefing)
 2. **Is it actionable or time-sensitive?** (the user should do something, or the window to act is closing)
 3. **Does it meaningfully change the picture?** (not incremental noise, but a real shift)
 
@@ -65,7 +70,7 @@ A finding must pass at least 2 of 3 to be included.
 - Minor patch release of a dependency → incremental
 - General AI industry commentary → not specific enough
 
-## Step 4: Output
+## Step 5: Output
 
 ### If noteworthy findings exist:
 
@@ -74,18 +79,18 @@ Return a concise briefing in the user's preferred language (Chinese primary, Eng
 ```
 📡 Heartbeat | {date}
 
-{emoji} **{Topic}**
+{emoji} **[{Topic}]({URL})**
 {1-2 sentence summary of what happened and why it matters}
 {Optional: suggested action}
 
-{emoji} **{Topic}**
+{emoji} **[{Topic}]({URL})**
 ...
 
 ---
 Sources: {URLs}
 ```
 
-Keep it to 3 items max. Ruthlessly prioritize. The user should be able to read the entire briefing in under 30 seconds.
+Keep it to 5 items max. Ruthlessly prioritize. The user should be able to read the entire briefing in under 60 seconds.
 
 Emoji guide: 📈📉 for markets, 🔧 for tech/tools, 🏢 for career/employer, ⚠️ for alerts, 📸 for creative interests, 🗓️ for schedule/travel.
 
