@@ -52,7 +52,7 @@ async function queryClaudeUsage() {
   return (await response.json()) as {
     five_hour: {
       utilization: number;
-      resets_at: string;
+      resets_at: string | null;
     };
     seven_day: {
       utilization: number;

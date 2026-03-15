@@ -265,7 +265,7 @@ export function useSoulMemoryUpdate() {
 export interface ClaudeUsage {
   five_hour: {
     utilization: number;
-    resets_at: string;
+    resets_at: string | null;
   };
   seven_day: {
     utilization: number;
@@ -287,7 +287,10 @@ export function useClaudeUsage() {
     queryKey: ["usage", "claude"],
     queryFn: async () => {
       const res = await api.usage.claude.$get();
-      const json = (await res.json()) as { usage?: ClaudeUsage; error?: string };
+      const json = (await res.json()) as {
+        usage?: ClaudeUsage;
+        error?: string;
+      };
       if (!res.ok) {
         throw new Error(json.error ?? "Failed to fetch usage");
       }
