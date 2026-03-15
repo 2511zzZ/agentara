@@ -40,9 +40,9 @@ Find the most relevant news for the user's profile and watchlist topics.
 For each high-priority watchlist topic (aim for 3-5 topics, no more than 8), perform a focused web search. Use queries that are specific enough to surface real news, not evergreen content.
 
 Good search patterns:
+- `"ByteDance" news this week` — catches employer news
 - `"BABA stock" today` — catches daily movers
 - `"LangChain" release 2026` — catches recent releases
-- `"ByteDance" news this week` — catches employer news
 - `"Claude" OR "Anthropic" announcement` — catches AI tooling updates
 
 Skip topics where nothing meaningful could have changed since the last check (e.g., stable personal preferences, unchanging habits).
