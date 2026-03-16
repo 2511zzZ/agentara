@@ -100,6 +100,7 @@ Before finalizing the news list, apply these filters strictly:
    - [罗永浩的十字路口](https://www.xiaoyuzhoufm.com/podcast/68981df29e7bcd326eb91d88)
    - [十字路口 Crossing](https://www.xiaoyuzhoufm.com/podcast/60502e253c92d4f62c2a9577)
    - [晚点聊](https://www.xiaoyuzhoufm.com/podcast/61933ace1b4320461e91fd55)
+   - [锦供参考](https://www.xiaoyuzhoufm.com/podcast/69a6aba3de6dd3793a39e06b)
    - [elsewhere别处发生](https://www.xiaoyuzhoufm.com/podcast/68ff657d9c745a6e69da8fcf)
 
 2. Only select the podcasts which updated in the last 48 hours.
