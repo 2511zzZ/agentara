@@ -18,7 +18,7 @@ import {
 } from "@/shared";
 
 import { feishuThreads } from "./data";
-import { renderMessageCard } from "./message-renderer";
+import { renderMessageCard, splitMarkdownByTables } from "./message-renderer";
 import type { MessageReceiveEventData } from "./types";
 import { convertPostToMarkdown } from "./utils";
 
@@ -105,7 +105,12 @@ export class FeishuMessageChannel
     message: Omit<AssistantMessage, "id">,
     { streaming = true }: { streaming?: boolean } = {},
   ): Promise<AssistantMessage> {
-    const card = await renderMessageCard(message.content, {
+    const { firstMessageContent, remainingChunks } = this._prepareMessageContent(
+      message.content,
+      streaming,
+    );
+
+    const card = await renderMessageCard(firstMessageContent, {
       streaming,
       uploadImage: this.uploadImage.bind(this),
     });
@@ -130,6 +135,8 @@ export class FeishuMessageChannel
     const sessionId = message.session_id;
     this._mapThreadToSession(threadId!, sessionId);
 
+    await this._sendRemainingChunks(replyMessage.message_id!, remainingChunks);
+
     const assistantMessage = message as AssistantMessage;
     assistantMessage.id = replyMessage.message_id!;
 
@@ -149,7 +156,12 @@ export class FeishuMessageChannel
   async postMessage(
     message: Omit<AssistantMessage, "id">,
   ): Promise<AssistantMessage> {
-    const card = await renderMessageCard(message.content, {
+    const { firstMessageContent, remainingChunks } = this._prepareMessageContent(
+      message.content,
+      false,
+    );
+
+    const card = await renderMessageCard(firstMessageContent, {
       streaming: false,
       uploadImage: this.uploadImage.bind(this),
     });
@@ -170,6 +182,8 @@ export class FeishuMessageChannel
     const { message_id: messageId } = data;
     const assistantMessage = message as AssistantMessage;
     assistantMessage.id = messageId!;
+
+    await this._sendRemainingChunks(assistantMessage.id, remainingChunks);
 
     const lastText = message.content.filter((c) => c.type === "text").pop();
     if (lastText?.type === "text") {
@@ -214,7 +228,12 @@ export class FeishuMessageChannel
       return;
     }
 
-    const card = await renderMessageCard(message.content, {
+    const { firstMessageContent, remainingChunks } = this._prepareMessageContent(
+      message.content,
+      streaming,
+    );
+
+    const card = await renderMessageCard(firstMessageContent, {
       streaming,
       uploadImage: this.uploadImage.bind(this),
     });
@@ -242,6 +261,8 @@ export class FeishuMessageChannel
       }
       throw err;
     }
+
+    await this._sendRemainingChunks(message.id, remainingChunks);
 
     if (!streaming) {
       const lastText = message.content.filter((c) => c.type === "text").pop();
@@ -381,6 +402,66 @@ export class FeishuMessageChannel
     filename += extname;
     await writeFile(nodePath.join(dir, filename));
     return nodePath.relative(config.paths.home, nodePath.join(dir, filename));
+  }
+
+  /**
+   * Prepare message content for sending, splitting if necessary due to table limits.
+   * @param content - Original message content.
+   * @param streaming - Whether the message is being streamed (skip splitting if true).
+   * @returns First chunk content and remaining chunks to send as follow-ups.
+   */
+  private _prepareMessageContent(
+    content: AssistantMessage["content"],
+    streaming: boolean,
+  ): {
+    firstMessageContent: AssistantMessage["content"];
+    remainingChunks: string[];
+  } {
+    const lastTextContent = content.findLast((c) => c.type === "text");
+    const markdownChunks = lastTextContent
+      ? splitMarkdownByTables(lastTextContent.text)
+      : [];
+    const needsSplit = !streaming && markdownChunks.length > 1;
+
+    const firstMessageContent = needsSplit
+      ? (content.map((c) =>
+          c.type === "text" ? { ...c, text: markdownChunks[0] } : c,
+        ) as AssistantMessage["content"])
+      : content;
+
+    const remainingChunks = needsSplit ? markdownChunks.slice(1) : [];
+
+    return { firstMessageContent, remainingChunks };
+  }
+
+  /**
+   * Send remaining markdown chunks as follow-up reply messages.
+   * @param messageId - The message ID to reply to.
+   * @param chunks - Array of markdown strings to send.
+   */
+  private async _sendRemainingChunks(
+    messageId: string,
+    chunks: string[],
+  ): Promise<void> {
+    for (const chunkText of chunks) {
+      const chunkCard = await renderMessageCard(
+        [{ type: "text", text: chunkText }],
+        {
+          streaming: false,
+          uploadImage: this.uploadImage.bind(this),
+        },
+      );
+      await this._client.im.message.reply({
+        path: {
+          message_id: messageId,
+        },
+        data: {
+          msg_type: "interactive",
+          content: JSON.stringify(chunkCard),
+          reply_in_thread: true,
+        },
+      });
+    }
   }
 
   /** Extract local file paths from markdown link syntax [text](path) in text. */

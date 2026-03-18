@@ -313,3 +313,69 @@ function _renderStep(text: string, iconToken: string): DivElement {
     },
   };
 }
+
+/**
+ * Regex pattern for matching markdown tables.
+ * Matches: header row, separator row, and one or more data rows.
+ */
+const MARKDOWN_TABLE_REGEX =
+  /^\|.+\|[ \t]*\n\|[\s:|-]+\|[ \t]*\n(?:\|.+\|[ \t]*\n?)+/gm;
+
+/**
+ * Split markdown content into multiple chunks, each containing at most a specified
+ * number of tables. Used to work around Feishu's limit of 5 table components per card.
+ *
+ * @param markdown - The markdown content to split.
+ * @param maxTables - Maximum number of tables per chunk (default: 5).
+ * @returns Array of markdown strings, each with at most maxTables tables.
+ */
+export function splitMarkdownByTables(
+  markdown: string,
+  maxTables: number = 5,
+): string[] {
+  const tables = markdown.match(MARKDOWN_TABLE_REGEX);
+  if (!tables || tables.length <= maxTables) {
+    return [markdown];
+  }
+
+  // Find all table positions in the markdown
+  const tablePositions: Array<{ start: number; end: number; match: string }> =
+    [];
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(MARKDOWN_TABLE_REGEX.source, "gm");
+  while ((match = regex.exec(markdown)) !== null) {
+    tablePositions.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      match: match[0],
+    });
+  }
+
+  const chunks: string[] = [];
+  let currentChunkStart = 0;
+  let tablesInCurrentChunk = 0;
+
+  for (let i = 0; i < tablePositions.length; i++) {
+    const tablePos = tablePositions[i]!;
+    tablesInCurrentChunk++;
+
+    // If we've reached the max tables for this chunk, split here
+    if (tablesInCurrentChunk >= maxTables && i < tablePositions.length - 1) {
+      // End current chunk after this table
+      const chunkEnd = tablePos.end;
+      chunks.push(markdown.slice(currentChunkStart, chunkEnd).trim());
+
+      // Start new chunk from the content after the current table
+      currentChunkStart = chunkEnd;
+      tablesInCurrentChunk = 0;
+    }
+  }
+
+  // Add the remaining content as the last chunk
+  const remainingContent = markdown.slice(currentChunkStart).trim();
+  if (remainingContent) {
+    chunks.push(remainingContent);
+  }
+
+  return chunks;
+}
