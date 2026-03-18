@@ -1,6 +1,6 @@
 import { existsSync, unlinkSync } from "node:fs";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { DrizzleDB } from "@/data";
 import { config, createLogger, extractTextContent, uuid } from "@/shared";
@@ -120,6 +120,7 @@ export class SessionManager {
         cwd,
         channel_id: channelId,
         last_message_created_at: null,
+        runner_session_id: null,
         created_at: now,
         updated_at: now,
       })
@@ -136,6 +137,7 @@ export class SessionManager {
     const session = new Session(sessionId, agentType, {
       isNewSession: true,
       cwd,
+      runnerSessionId: undefined,
     });
     this._attachWriter(session, sessionId);
 
@@ -170,6 +172,7 @@ export class SessionManager {
       {
         isNewSession: false,
         cwd: options?.cwd ?? row.cwd,
+        runnerSessionId: row.runner_session_id ?? undefined,
       },
     );
     this._attachWriter(session, sessionId);
@@ -237,10 +240,33 @@ export class SessionManager {
       .run();
   }
 
+  private _updateRunnerSessionId(
+    sessionId: string,
+    runnerSessionId: string,
+  ): void {
+    this._db
+      .update(sessions)
+      .set({
+        runner_session_id: runnerSessionId,
+        updated_at: Date.now(),
+      })
+      .where(
+        and(eq(sessions.id, sessionId), isNull(sessions.runner_session_id)),
+      )
+      .run();
+  }
+
   private _attachWriter(session: Session, sessionId: string): void {
     const fileWriter = new SessionJSONLWriter(sessionId);
     const logWriter = new SessionLogWriter(sessionId);
     session.on("message", (message) => {
+      if (
+        session.agentType === "codex" &&
+        message.role === "system" &&
+        message.subtype === "init"
+      ) {
+        this._updateRunnerSessionId(sessionId, message.id);
+      }
       logWriter.write(message);
       fileWriter.write(message);
       this._diaryWriter.write(message);

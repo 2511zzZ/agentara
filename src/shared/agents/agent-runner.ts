@@ -20,6 +20,11 @@ export const AgentRunOptions = z.object({
    * The current working directory.
    */
   cwd: z.string(),
+
+  /**
+   * Runner-specific session/thread id used by some providers for true resume.
+   */
+  runnerSessionId: z.string().optional(),
 });
 export interface AgentRunOptions extends z.infer<typeof AgentRunOptions> {}
 

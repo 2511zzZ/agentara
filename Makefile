@@ -7,3 +7,9 @@ install:
 
 dev:
 	bun dev
+
+up:
+	@bash scripts/up.sh
+
+down:
+	@bash scripts/down.sh

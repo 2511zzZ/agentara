@@ -30,3 +30,5 @@ export function resolveDataFilePath(filename: string) {
 
 export const claude_home = join(home, ".claude");
 export const skills = join(claude_home, "skills");
+
+export const agents_home = join(home, ".agents");

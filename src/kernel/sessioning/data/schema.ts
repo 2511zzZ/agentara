@@ -17,6 +17,8 @@ export const sessions = sqliteTable("sessions", {
   channel_id: text("channel_id"),
   /** The text content of the session's first inbound message. */
   first_message: text("first_message").notNull().default(""),
+  /** Runner-specific session/thread id (e.g. Codex thread id) for resume. */
+  runner_session_id: text("runner_session_id"),
   /** Epoch milliseconds of the most recent message, or null if no messages yet. */
   last_message_created_at: integer("last_message_created_at"),
   /** Epoch milliseconds when the session was created. */

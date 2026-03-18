@@ -74,11 +74,11 @@ export class HonoServer {
    * Start listening on the configured host and port.
    *
    * Uses `AGENTARA_SERVICE_PORT` (default 1984) and
-   * `AGENTARA_SERVICE_HOST` (default localhost).
+   * `AGENTARA_SERVICE_HOST` (default 0.0.0.0).
    */
   async start(): Promise<void> {
     const port = parseInt(Bun.env.AGENTARA_SERVICE_PORT ?? "1984", 10);
-    const hostname = Bun.env.AGENTARA_SERVICE_HOST ?? "localhost";
+    const hostname = Bun.env.AGENTARA_SERVICE_HOST ?? "0.0.0.0";
 
     this._server = Bun.serve({
       fetch: this._app.fetch,

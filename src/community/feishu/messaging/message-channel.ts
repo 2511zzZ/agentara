@@ -22,6 +22,30 @@ import { renderMessageCard } from "./message-renderer";
 import type { MessageReceiveEventData } from "./types";
 import { convertPostToMarkdown } from "./utils";
 
+function _isFeishuBadRequestError(err: unknown): boolean {
+  if (!err || typeof err !== "object") {
+    return false;
+  }
+
+  const candidate = err as {
+    status?: number;
+    code?: number | string;
+    response?: {
+      status?: number;
+      data?: {
+        code?: number | string;
+      };
+    };
+  };
+
+  return (
+    candidate.status === 400 ||
+    candidate.code === 400 ||
+    candidate.response?.status === 400 ||
+    candidate.response?.data?.code === 400
+  );
+}
+
 /** Message channel implementation for Feishu (Lark) chat platform. */
 export class FeishuMessageChannel
   extends EventEmitter<MessageChannelEventTypes>
@@ -32,6 +56,7 @@ export class FeishuMessageChannel
   private _inboundClient: WSClient;
   private _client: Client;
   private _db: DrizzleDB;
+  private _failedCardUpdateMessages = new Set<string>();
   private _logger: Logger;
 
   /**
@@ -84,6 +109,9 @@ export class FeishuMessageChannel
       streaming,
       uploadImage: this.uploadImage.bind(this),
     });
+    if (!streaming) {
+      this._logOutboundMessage(message.session_id, message.content);
+    }
     const { data: replyMessage } = await this._client.im.message.reply({
       path: {
         message_id: messageId,
@@ -104,6 +132,17 @@ export class FeishuMessageChannel
 
     const assistantMessage = message as AssistantMessage;
     assistantMessage.id = replyMessage.message_id!;
+
+    if (!streaming) {
+      const lastText = message.content.filter((c) => c.type === "text").pop();
+      if (lastText?.type === "text") {
+        await this._sendLocalFileAttachments(
+          assistantMessage.id,
+          lastText.text,
+        );
+      }
+    }
+
     return assistantMessage;
   }
 
@@ -114,6 +153,7 @@ export class FeishuMessageChannel
       streaming: false,
       uploadImage: this.uploadImage.bind(this),
     });
+    this._logOutboundMessage(message.session_id, message.content);
     const { data } = await this._client.im.message.create({
       params: {
         receive_id_type: "chat_id",
@@ -130,6 +170,12 @@ export class FeishuMessageChannel
     const { message_id: messageId } = data;
     const assistantMessage = message as AssistantMessage;
     assistantMessage.id = messageId!;
+
+    const lastText = message.content.filter((c) => c.type === "text").pop();
+    if (lastText?.type === "text") {
+      await this._sendLocalFileAttachments(assistantMessage.id, lastText.text);
+    }
+
     const emojis = [
       "思考中",
       "送你小红花",
@@ -164,18 +210,45 @@ export class FeishuMessageChannel
     message: AssistantMessage,
     { streaming = true }: { streaming?: boolean } = {},
   ): Promise<void> {
+    if (this._failedCardUpdateMessages.has(message.id)) {
+      return;
+    }
+
     const card = await renderMessageCard(message.content, {
       streaming,
       uploadImage: this.uploadImage.bind(this),
     });
-    await this._client.im.message.patch({
-      path: {
-        message_id: message.id,
-      },
-      data: {
-        content: JSON.stringify(card),
-      },
-    });
+    if (!streaming) {
+      this._logOutboundMessage(message.session_id, message.content);
+    }
+    try {
+      await this._client.im.message.patch({
+        path: {
+          message_id: message.id,
+        },
+        data: {
+          content: JSON.stringify(card),
+        },
+      });
+    } catch (err) {
+      if (_isFeishuBadRequestError(err)) {
+        this._failedCardUpdateMessages.add(message.id);
+        this._logger.warn(
+          { err, message_id: message.id, session_id: message.session_id },
+          "Feishu card update failed with 400; sending fallback reply",
+        );
+        await this._replyUpdateFailureMessage(message.id);
+        return;
+      }
+      throw err;
+    }
+
+    if (!streaming) {
+      const lastText = message.content.filter((c) => c.type === "text").pop();
+      if (lastText?.type === "text") {
+        await this._sendLocalFileAttachments(message.id, lastText.text);
+      }
+    }
   }
 
   /**
@@ -200,6 +273,49 @@ export class FeishuMessageChannel
       return res.image_key;
     } else {
       throw new Error("Failed to upload image");
+    }
+  }
+
+  /**
+   * Uploads a file to Feishu. Returns the key of the uploaded file.
+   * @param filePath - The path to the file relative to the home directory.
+   * @returns The key of the uploaded file.
+   */
+  async uploadFile(filePath: string): Promise<string> {
+    const absPath = nodePath.join(config.paths.home, filePath);
+    const file = fs.createReadStream(absPath);
+    const fileName = nodePath.basename(absPath);
+    const ext = nodePath.extname(absPath).slice(1).toLowerCase();
+    const fileTypeMap: Record<
+      string,
+      "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream"
+    > = {
+      opus: "opus",
+      mp4: "mp4",
+      pdf: "pdf",
+      doc: "doc",
+      docx: "doc",
+      xls: "xls",
+      xlsx: "xls",
+      ppt: "ppt",
+      pptx: "ppt",
+    };
+    const fileType = fileTypeMap[ext] ?? "stream";
+    this._logger.info(`Uploading file ${absPath} (type: ${fileType})`);
+    const res = await this._client.im.v1.file.create({
+      data: {
+        file_type: fileType,
+        file_name: fileName,
+        file,
+      },
+    });
+    this._logger.info(
+      `Uploaded file ${absPath} -> ${res?.file_key || "failed"}`,
+    );
+    if (res?.file_key) {
+      return res.file_key;
+    } else {
+      throw new Error("Failed to upload file");
     }
   }
 
@@ -265,6 +381,85 @@ export class FeishuMessageChannel
     filename += extname;
     await writeFile(nodePath.join(dir, filename));
     return nodePath.relative(config.paths.home, nodePath.join(dir, filename));
+  }
+
+  /** Extract local file paths from markdown link syntax [text](path) in text. */
+  private _extractLocalFilePaths(text: string): string[] {
+    const linkRegex = /(?<!!)\[.*?\]\(([^)]+)\)/g;
+    const paths: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = linkRegex.exec(text)) !== null) {
+      const filePath = match[1];
+      if (
+        filePath &&
+        !filePath.includes("://") &&
+        fs.existsSync(nodePath.join(config.paths.home, filePath))
+      ) {
+        paths.push(filePath);
+      }
+    }
+    return paths;
+  }
+
+  /** Upload local files referenced in text and send them as Feishu file message replies. */
+  private async _sendLocalFileAttachments(
+    messageId: string,
+    text: string,
+  ): Promise<void> {
+    const filePaths = this._extractLocalFilePaths(text);
+    const seen = new Set<string>();
+    for (const filePath of filePaths) {
+      if (seen.has(filePath)) continue;
+      seen.add(filePath);
+      try {
+        const fileKey = await this.uploadFile(filePath);
+        await this._client.im.message.reply({
+          path: { message_id: messageId },
+          data: {
+            msg_type: "file",
+            content: JSON.stringify({ file_key: fileKey }),
+            reply_in_thread: true,
+          },
+        });
+        this._logger.info(`Sent file ${filePath} as Feishu attachment`);
+      } catch (err) {
+        this._logger.warn(
+          { err },
+          `Failed to send file attachment: ${filePath}`,
+        );
+      }
+    }
+  }
+
+  private async _replyUpdateFailureMessage(messageId: string): Promise<void> {
+    try {
+      await this._client.im.message.reply({
+        path: {
+          message_id: messageId,
+        },
+        data: {
+          msg_type: "text",
+          content: JSON.stringify({
+            text: "抱歉，这条消息更新失败了，请稍后重试。",
+          }),
+          reply_in_thread: true,
+        },
+      });
+    } catch (err) {
+      this._logger.warn(
+        { err, message_id: messageId },
+        "Failed to send fallback reply after Feishu card update error",
+      );
+    }
+  }
+
+  private _logOutboundMessage(
+    sessionId: string,
+    content: AssistantMessage["content"],
+  ) {
+    const lastText = content.filter((item) => item.type === "text").pop();
+    const finalText = lastText?.type === "text" ? lastText.text : null;
+    this._logger.info([sessionId, finalText], "Final Feishu outbound content");
   }
 
   private _handleMessageReceive = async ({

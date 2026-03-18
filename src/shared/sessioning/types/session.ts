@@ -17,6 +17,8 @@ export const Session = z.object({
   channel_id: z.string().optional().nullable(),
   /** The text content of the session's first inbound message. */
   first_message: z.string(),
+  /** Runner-specific session/thread id (e.g. Codex thread id), if available. */
+  runner_session_id: z.string().optional().nullable(),
   /** Epoch milliseconds of the most recent message, or null if no messages yet. */
   last_message_created_at: z.number().nullable(),
   /** Epoch milliseconds when the session was created. */

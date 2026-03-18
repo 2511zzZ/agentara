@@ -10,6 +10,7 @@ describe("Session", () => {
     cwd: "/home/user/project",
     channel_id: "ch-1",
     first_message: "hello",
+    runner_session_id: "runner-sess-1",
     last_message_created_at: now,
     created_at: now,
     updated_at: now,
@@ -26,10 +27,12 @@ describe("Session", () => {
     const input = {
       ...validSession,
       channel_id: null,
+      runner_session_id: null,
       last_message_created_at: null,
     };
     const result = Session.parse(input);
     expect(result.channel_id).toBeNull();
+    expect(result.runner_session_id).toBeNull();
     expect(result.last_message_created_at).toBeNull();
   });
 

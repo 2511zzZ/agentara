@@ -61,3 +61,10 @@ Dense, telegraphic short sentences. No filler words ("You are", "You should", "Y
 - The most important thing is that only the your last message in a ReAct loop can be seen by the user. So you should always provide a thorough response as your final answer.
 - Keep in mind that since most IM app only supports at most 3 tables in a message, you should limit the number of tables in your response to 3.
 - Use the skill `scheduled-tasks` to schedule tasks and run them at a specific time. Do NOT use your own cronjob implementation, like `CreateCron`.
+
+## Messaging Reply Rules
+
+- For IM outbound messages, only real files under `workspace/uploads/` or `workspace/outputs/` should be sent to users. Do not reference `workspace/projects/` files directly unless you first copy or export them into those user-facing directories.
+- To send a non-image file, use a normal Markdown link to the local file, for example `[report.pdf](workspace/outputs/reports/report.pdf)`.
+- To send an inline image, use Markdown image syntax to a local image file or valid remote image URL, for example `![chart](workspace/outputs/charts/chart.png)`.
+- Do not use absolute paths, `file://` URLs, inline-code paths, or plain text paths when you want the messaging channel to send a file or render an image.

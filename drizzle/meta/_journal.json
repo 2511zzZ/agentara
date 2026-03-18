@@ -64,6 +64,13 @@
       "when": 1773373586045,
       "tag": "0008_smiling_mystique",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1773500000000,
+      "tag": "0009_blue_proteus",
+      "breakpoints": true
     }
   ]
 }
