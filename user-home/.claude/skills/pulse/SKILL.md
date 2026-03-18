@@ -146,7 +146,7 @@ Use the following template. All section titles and product/repo/news names MUST 
 Language: Chinese (full-width punctuation: ，、：！？。）for prose; English for product names, repo names, and technical terms.
 
 ```markdown
-# <font color="orange">📡 Pulse | {🌅 or 🌆} — {YYYY年M月D日}</font>
+# 📡 Pulse | {🌅 or 🌆} — {YYYY年M月D日}
 
 ## <font color="orange">🚀 Product Hunts</font>
 
@@ -205,9 +205,8 @@ shownotes 摘要（不要原文，1-2 句简体中文重点总结，以及我为
 - 最新交易日：{date}
 > Color red if change is positive, green if negative.
 
-![BABA 90-Day](chart_path)
-> **Don't forget** to **include the chart image**!
-> The path of the image is in the `chart` field of the `prefetch.stock.BABA` object.
+![BABA 45-Day](workspace/outputs/stock-BABA/YYYY-MM-DD.png)
+> The chart image should be **always** included.
 
 {if_anomaly}
 ⚠️ {abnormal_description}
@@ -249,4 +248,5 @@ shownotes 摘要（不要原文，1-2 句简体中文重点总结，以及我为
 - **Chinese punctuation**: All Chinese prose uses full-width punctuation (，。：！？、）。
 - **Do NOT use citations or `` tags**: Pulse is a briefing, not a research report. Source attribution is handled by the hyperlinks in headings.
 - **No duplication**: Do not include the same news item in the same day.
-- **Stock section**: No tables, no charts. Plain text list format only. If market is closed (pre-market / weekend), note the last closing price and state "（已收盘）".
+- **Stock section**: If market is closed (pre-market / weekend), note the last closing price and state "（已收盘）".
+- **Include the stock chart image**: The path of the image is in the `chart` field of the `prefetch.stock.BABA` object.
