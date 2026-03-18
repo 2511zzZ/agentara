@@ -554,7 +554,7 @@ async def main():
     if stock_result and "error" not in stock_result:
         chart_path = generate_stock_chart("BABA", stock_result.pop("_all_rows", []))
         stock_result["chart"] = chart_path
-        output["stock"]["BABA"] = stock_result
+        output["stock"] = [{"symbol": "BABA", "market": "NYSE", "data": stock_result}]
 
     json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
     print()  # trailing newline
