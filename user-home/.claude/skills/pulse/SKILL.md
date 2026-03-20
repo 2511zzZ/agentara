@@ -28,6 +28,7 @@ Execute the following steps in order. Step 1.5 runs a Python prefetch script tha
    - Evening → 🌆
 3. Determine the day of the week — needed for Nanjing weekend weather.
 4. Product Hunt launches happen Mon–Fri (Pacific Time). If today is Saturday/Sunday, use the most recent Friday's leaderboard and note this.
+5. You'll get the current time in the `prefetch.fetched_at` field (Step 1.5).
 
 ---
 

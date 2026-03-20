@@ -6,6 +6,19 @@
 2. Map to 8 narrative beats
 3. Use the provided prompt template to generate the JSON prompt file
 
+## Text Array (Per Panel, Optional)
+
+When a panel contains signs, labels, or in-scene text, add a `text` array. Each item: `content`, `style`, `font`, `font_size`, `color`, `position`, `alignment`. Omit if no text in scene.
+
+## Camera Specs (Per Panel)
+
+Each panel must include camera specs. Vary by narrative beat:
+
+- **Setup/Establishing**: `position: eye level`, `lens: 35mm`, `aperture: f/5.6`, `shot_type: medium shot` or `long shot`
+- **Dialogue/Reaction**: `position: eye level`, `lens: 50mm`, `aperture: f/4`, `shot_type: close-up` or `medium shot`
+- **Action/Chaos**: `position: low angle` or `Dutch angle`, `lens: 24mm`, `aperture: f/8`, `shot_type: medium full shot`
+- **Punchline**: `position: eye level` or `high angle`, `lens: 85mm`, `aperture: f/2.8`, `shot_type: close-up`
+
 ## Panel Layout
 
 ```
@@ -64,6 +77,13 @@ Right column: x=540, width=450
       "background": "#FFFFFF",
       "scene": {
         "location": "[Location name]",
+        "camera": {
+          "position": "eye level",
+          "angle": "3/4 view",
+          "lens": "35mm",
+          "aperture": "f/5.6",
+          "shot_type": "medium shot"
+        },
         "characters": [
           {
             "name": "[Character]",
@@ -84,6 +104,17 @@ Right column: x=540, width=450
               "font_size": 22,
               "text_align": "center"
             }
+          }
+        ],
+        "text": [
+          {
+            "content": "[Store sign or label - omit array if none]",
+            "style": "bold, comic style",
+            "font": "Doraemon, sans-serif",
+            "font_size": 18,
+            "color": "#000000",
+            "position": "in-scene",
+            "alignment": "center"
           }
         ],
         "props": []
