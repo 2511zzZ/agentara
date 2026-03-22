@@ -7,16 +7,21 @@ RUN_DIR="$PROJECT_DIR/.run"
 GRACEFUL_WAIT_TICKS=10  # 10 × 0.5s = 5 seconds
 EXIT_CODE=0
 
-# Expected command patterns per process name
-declare -A EXPECTED_CMD
-EXPECTED_CMD[server]="bun run dev:server"
-EXPECTED_CMD[web]="bun run dev:web"
+# Expected command patterns per process name (bash 3.2 compatible)
+expected_cmd() {
+  case "$1" in
+    server) echo "bun run dev:server" ;;
+    web)    echo "bun run dev:web" ;;
+    *)      echo "" ;;
+  esac
+}
 
 # Verify PID belongs to the expected process
 is_our_process() {
   local pid="$1"
   local name="$2"
-  local expected="${EXPECTED_CMD[$name]:-}"
+  local expected
+  expected="$(expected_cmd "$name")"
 
   if [ -z "$expected" ]; then
     return 0  # no pattern to match, assume ours

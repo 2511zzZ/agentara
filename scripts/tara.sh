@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF="${BASH_SOURCE[0]}"
+if [[ -L "$SELF" ]]; then
+  SELF="$(readlink "$SELF")"
+  [[ "$SELF" = /* ]] || SELF="$(dirname "${BASH_SOURCE[0]}")/$SELF"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SELF")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
@@ -48,11 +53,18 @@ case "$cmd" in
     ;;
   logs)
     target="${2:-server}"
-    log_file="$PROJECT_DIR/.run/logs/$target.log"
-    if [ ! -f "$log_file" ]; then
-      echo "Log file not found: $log_file"
+    path_file="$PROJECT_DIR/.run/$target.log.path"
+    if [ -f "$path_file" ]; then
+      log_file="$(cat "$path_file")"
+    else
+      # fallback: find latest timestamped log
+      log_file="$(ls -t "$PROJECT_DIR/.run/logs/$target-"*.log 2>/dev/null | head -1 || true)"
+    fi
+    if [ -z "$log_file" ] || [ ! -f "$log_file" ]; then
+      echo "No log file found for: $target"
       exit 1
     fi
+    echo "Tailing: $log_file"
     tail -f "$log_file"
     ;;
   ""|help|--help|-h)
