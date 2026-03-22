@@ -241,14 +241,16 @@ export class FeishuMessageChannel
       this._logOutboundMessage(message.session_id, message.content);
     }
     try {
-      await this._client.im.message.patch({
-        path: {
-          message_id: message.id,
-        },
-        data: {
-          content: JSON.stringify(card),
-        },
-      });
+      await this._retryOnNetworkError(() =>
+        this._client.im.message.patch({
+          path: {
+            message_id: message.id,
+          },
+          data: {
+            content: JSON.stringify(card),
+          },
+        }),
+      );
     } catch (err) {
       if (_isFeishuBadRequestError(err)) {
         this._failedCardUpdateMessages.add(message.id);
@@ -510,6 +512,32 @@ export class FeishuMessageChannel
         );
       }
     }
+  }
+
+  private async _retryOnNetworkError<T>(
+    fn: () => Promise<T>,
+    maxAttempts = 3,
+  ): Promise<T> {
+    const RETRYABLE = new Set(["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "ENOTFOUND"]);
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        if (!RETRYABLE.has(code ?? "") || attempt === maxAttempts) {
+          throw err;
+        }
+        lastErr = err;
+        const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        this._logger.warn(
+          { err, attempt, next_attempt: attempt + 1, delay_ms: delayMs },
+          `Feishu API network error (${code}), retrying`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw lastErr;
   }
 
   private async _replyUpdateFailureMessage(messageId: string): Promise<void> {

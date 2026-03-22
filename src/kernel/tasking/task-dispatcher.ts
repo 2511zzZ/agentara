@@ -617,11 +617,18 @@ export class TaskDispatcher {
       }
     });
 
-    this._sessionLocks.set(sessionId, current);
-    await current;
-
-    if (this._sessionLocks.get(sessionId) === current) {
-      this._sessionLocks.delete(sessionId);
+    // Store a non-rejecting version so that a failed task does not poison the
+    // session lock chain: if `current` rejects, subsequent tasks would see a
+    // rejected `previous` and their `.then()` callback would never run,
+    // causing the session to silently stall forever.
+    const lockChain = current.catch(() => {});
+    this._sessionLocks.set(sessionId, lockChain);
+    try {
+      await current;
+    } finally {
+      if (this._sessionLocks.get(sessionId) === lockChain) {
+        this._sessionLocks.delete(sessionId);
+      }
     }
   }
 
