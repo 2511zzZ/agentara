@@ -61,6 +61,12 @@ def main():
     json_str = json.dumps(data, ensure_ascii=False)
     html = html.replace("__POSTER_DATA__", json_str)
 
+    # Fix relative path resolution: inject <base> tag so that assets like
+    # logo.png resolve relative to the template directory, not the output
+    # directory where the temp HTML file is written.
+    base_href = template_path.parent.resolve().as_uri() + "/"
+    html = html.replace("<head>", f"<head>\n<base href=\"{base_href}\">", 1)
+
     # Write temp HTML
     tmp_html = Path(args.output).with_suffix(".tmp.html")
     with open(tmp_html, "w", encoding="utf-8") as f:
