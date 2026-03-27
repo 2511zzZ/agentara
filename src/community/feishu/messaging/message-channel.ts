@@ -95,6 +95,7 @@ export class FeishuMessageChannel
     await this._inboundClient.start({
       eventDispatcher: new EventDispatcher({}).register({
         "im.message.receive_v1": this._handleMessageReceive,
+        "im.message.recalled_v1": this._handleMessageRecall,
       }),
     });
   }
@@ -561,6 +562,17 @@ export class FeishuMessageChannel
       ],
     };
     this.emit("message:inbound", userMessage);
+  };
+
+  private _handleMessageRecall = async (data: {
+    message_id?: string;
+    chat_id?: string;
+    recall_time?: string;
+    recall_type?: string;
+  }) => {
+    if (!data.message_id) return;
+    this._logger.info({ message_id: data.message_id }, "message recalled");
+    this.emit("message:recalled", data.message_id, this.id);
   };
 
   private _threadIdToSessionId = new Map<string, string>();

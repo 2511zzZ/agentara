@@ -44,6 +44,9 @@ export class MultiChannelMessageGateway
     channel.on("message:inbound", (message: UserMessage) => {
       this._handleInboundMessage(channel.id, message);
     });
+    channel.on("message:recalled", (messageId: string, channelId: string) => {
+      this.emit("message:recalled", messageId, channelId);
+    });
     this._logger.info(`Registered channel: ${channel.id}`);
   }
 

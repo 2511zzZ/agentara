@@ -98,6 +98,7 @@ class Kernel {
       );
     }
     this._messageGateway.on("message:inbound", this._handleInboundMessage);
+    this._messageGateway.on("message:recalled", this._handleMessageRecall);
   }
 
   /**
@@ -111,6 +112,14 @@ class Kernel {
   }
 
   private _handleInboundMessage = async (message: UserMessage) => {
+    const text = extractTextContent(message).trim();
+
+    // Handle /stop command
+    if (text === "/stop") {
+      await this._handleStopCommand(message);
+      return;
+    }
+
     const task: InboundMessageTaskPayload = {
       type: "inbound_message",
       message,
@@ -118,10 +127,46 @@ class Kernel {
     await this._taskDispatcher.dispatch(message.session_id, task);
   };
 
+  private _handleStopCommand = async (message: UserMessage) => {
+    const sessionId = message.session_id;
+    const runningTaskId =
+      this._taskDispatcher.getRunningTaskForSession(sessionId);
+
+    if (runningTaskId) {
+      await this._taskDispatcher.deleteTask(runningTaskId);
+      await this._messageGateway.replyMessage(message.id, {
+        role: "assistant",
+        session_id: sessionId,
+        content: [{ type: "text", text: "Task stopped." }],
+      });
+    } else {
+      await this._messageGateway.replyMessage(message.id, {
+        role: "assistant",
+        session_id: sessionId,
+        content: [{ type: "text", text: "No running task found." }],
+      });
+    }
+  };
+
+  private _handleMessageRecall = async (
+    messageId: string,
+    channelId: string,
+  ) => {
+    const taskId = this._taskDispatcher.getTaskByMessageId(messageId);
+    if (taskId) {
+      await this._taskDispatcher.deleteTask(taskId);
+      this._logger.info(
+        { message_id: messageId, task_id: taskId, channel_id: channelId },
+        "task stopped due to message recall",
+      );
+    }
+  };
+
   private _handleInboundMessageTask = async (
     taskId: string,
     sessionId: string,
     payload: InboundMessageTaskPayload,
+    signal?: AbortSignal,
   ) => {
     const inboundMessage = payload.message;
     const session = await this._sessionManager.resolveSession(sessionId, {
@@ -146,7 +191,7 @@ class Kernel {
       },
     );
     contents = [];
-    const stream = await session.stream(inboundMessage);
+    const stream = await session.stream(inboundMessage, { signal });
     let lastMessage: AssistantMessage | undefined;
     for await (const message of stream) {
       if (message.role === "assistant") {
@@ -175,6 +220,7 @@ class Kernel {
     _taskId: string,
     sessionId: string,
     payload: ScheduledTaskPayload,
+    signal?: AbortSignal,
   ) => {
     const payload_without_instruction: { instruction?: string } = {
       ...payload,
@@ -201,7 +247,7 @@ ${payload.instruction}`,
       firstMessage: userMessage,
     });
     delete payload_without_instruction.instruction;
-    const assistantMessage = await session.run(userMessage);
+    const assistantMessage = await session.run(userMessage, { signal });
     if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
       return;
     }

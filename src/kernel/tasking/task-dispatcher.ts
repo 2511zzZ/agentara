@@ -1,6 +1,6 @@
 import type { Job } from "bunqueue/client";
 import { Queue, Worker } from "bunqueue/client";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import type { DrizzleDB } from "@/data";
 import type {
@@ -34,6 +34,7 @@ interface TaskJobData {
  * @param taskId - The bunqueue job ID for this task.
  * @param sessionId - The session that owns this task.
  * @param payload - The task payload.
+ * @param signal - Optional abort signal for cancelling the task.
  */
 export type TaskHandler<P extends TaskPayload = TaskPayload> = (
   // eslint-disable-next-line no-unused-vars
@@ -42,6 +43,8 @@ export type TaskHandler<P extends TaskPayload = TaskPayload> = (
   sessionId: string,
   // eslint-disable-next-line no-unused-vars
   payload: P,
+  // eslint-disable-next-line no-unused-vars
+  signal?: AbortSignal,
 ) => Promise<void>;
 
 /**
@@ -88,6 +91,8 @@ export class TaskDispatcher {
   private _handlers: Map<string, TaskHandler>;
   /** Per-session promise chain for serial execution. */
   private _sessionLocks: Map<string, Promise<void>>;
+  /** Tracks AbortController for currently running tasks. */
+  private _runningTasks: Map<string, AbortController>;
   private _logger: Logger;
 
   constructor(options: TaskDispatcherOptions) {
@@ -95,6 +100,7 @@ export class TaskDispatcher {
     this._db = options.db;
     this._handlers = new Map();
     this._sessionLocks = new Map();
+    this._runningTasks = new Map();
     this._logger = createLogger("task-dispatcher");
     this._queue = new Queue<TaskJobData>(QUEUE_NAME, {
       embedded: true,
@@ -412,6 +418,7 @@ export class TaskDispatcher {
 
   /**
    * Delete a task by ID. For pending jobs, removes from the queue.
+   * For running tasks, aborts the handler and kills any spawned subprocesses.
    * Always deletes the persisted task row. For one-shot scheduled tasks,
    * also removes the scheduler row.
    * @param taskId - The task (job) ID to remove.
@@ -422,6 +429,15 @@ export class TaskDispatcher {
     if (!row) {
       throw new Error(`Task not found: ${taskId}`);
     }
+
+    // Abort running task if it exists
+    const controller = this._runningTasks.get(taskId);
+    if (controller) {
+      controller.abort();
+      this._runningTasks.delete(taskId);
+      this._logger.info({ task_id: taskId }, "aborted running task");
+    }
+
     try {
       await this._queue.removeAsync(taskId);
     } catch {
@@ -472,6 +488,44 @@ export class TaskDispatcher {
    */
   getScheduledTasks(): ScheduledTaskRow[] {
     return this._db.select().from(scheduledTasks).all() as ScheduledTaskRow[];
+  }
+
+  /**
+   * Get the currently running task for a session, if any.
+   * @param sessionId - The session ID to look up.
+   * @returns The task ID if found, undefined otherwise.
+   */
+  getRunningTaskForSession(sessionId: string): string | undefined {
+    const row = this._db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.session_id, sessionId), eq(tasks.status, "running")))
+      .get();
+    return row?.id;
+  }
+
+  /**
+   * Get a pending or running task by its inbound message ID.
+   * @param messageId - The Feishu message ID to look up.
+   * @returns The task ID if found, undefined otherwise.
+   */
+  getTaskByMessageId(messageId: string): string | undefined {
+    const rows = this._db
+      .select({ id: tasks.id, payload: tasks.payload })
+      .from(tasks)
+      .where(inArray(tasks.status, ["pending", "running"]))
+      .all();
+
+    for (const row of rows) {
+      const payload = row.payload as TaskPayload;
+      if (
+        payload.type === "inbound_message" &&
+        payload.message.id === messageId
+      ) {
+        return row.id;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -593,9 +647,14 @@ export class TaskDispatcher {
         return;
       }
       this._updateTaskStatus(job.id, "running");
+
+      // Create AbortController for this task
+      const controller = new AbortController();
+      this._runningTasks.set(job.id, controller);
+
       try {
         const taskId = job.id;
-        await handler(taskId, sessionId, payload);
+        await handler(taskId, sessionId, payload, controller.signal);
         await job.updateProgress(100);
         this._updateTaskStatus(job.id, "completed");
         const schedulerId = job.data.scheduler_id;
@@ -608,12 +667,23 @@ export class TaskDispatcher {
           }
         }
       } catch (err) {
-        this._updateTaskStatus(job.id, "failed");
-        this._logger.error(
-          { session_id: sessionId, type: payload.type, err },
-          "task failed",
-        );
-        throw err;
+        // Don't mark as failed if aborted — the task was intentionally cancelled
+        if (controller.signal.aborted) {
+          this._updateTaskStatus(job.id, "cancelled");
+          this._logger.info(
+            { session_id: sessionId, type: payload.type },
+            "task cancelled",
+          );
+        } else {
+          this._updateTaskStatus(job.id, "failed");
+          this._logger.error(
+            { session_id: sessionId, type: payload.type, err },
+            "task failed",
+          );
+          throw err;
+        }
+      } finally {
+        this._runningTasks.delete(job.id);
       }
     });
 

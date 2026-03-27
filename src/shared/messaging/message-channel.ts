@@ -6,6 +6,8 @@ import type { AssistantMessage, UserMessage } from "./types";
 export interface MessageChannelEventTypes {
   // eslint-disable-next-line no-unused-vars
   "message:inbound": (message: UserMessage) => void;
+  // eslint-disable-next-line no-unused-vars
+  "message:recalled": (messageId: string, channelId: string) => void;
 }
 
 /** Abstract message channel for sending and receiving messages. */
