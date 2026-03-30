@@ -8,6 +8,7 @@ import {
   extractTextContent,
   uuid,
   type InboundMessageTaskPayload,
+  type InstantTaskPayload,
   type ScheduledTaskPayload,
 } from "@/shared";
 
@@ -80,6 +81,7 @@ class Kernel {
       this._handleInboundMessageTask,
     );
     this._taskDispatcher.route("scheduled_task", this._handleScheduledTask);
+    this._taskDispatcher.route("instant_task", this._handleInstantTask);
   }
 
   private _initMessageGateway(): void {
@@ -205,6 +207,36 @@ ${payload.instruction}`,
     if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
       return;
     }
+    await this._messageGateway.postMessage(assistantMessage);
+  };
+
+  private _handleInstantTask = async (
+    _taskId: string,
+    sessionId: string,
+    payload: InstantTaskPayload,
+  ) => {
+    const defaultChannelId = config.messaging.default_channel_id;
+    const userMessage: UserMessage = {
+      id: uuid(),
+      role: "user",
+      session_id: sessionId,
+      channel_id: defaultChannelId,
+      content: [
+        {
+          type: "text",
+          text: `> This message is triggered by an instant task.
+> The time is now ${new Date().toString()}.
+
+${payload.instruction}`,
+        },
+      ],
+    };
+    const session = await this._sessionManager.resolveSession(sessionId, {
+      cwd: payload.cwd,
+      channelId: userMessage.channel_id,
+      firstMessage: userMessage,
+    });
+    const assistantMessage = await session.run(userMessage);
     await this._messageGateway.postMessage(assistantMessage);
   };
 }

@@ -66,10 +66,29 @@ export const TaskSchedule = z
 export interface TaskSchedule extends z.infer<typeof TaskSchedule> {}
 
 /**
+ * Payload for an instant task triggered via API.
+ * Executes immediately in a specified working directory.
+ */
+export const InstantTaskPayload = z.object({
+  type: z.literal("instant_task"),
+  /** The instruction string sent to the agent. */
+  instruction: z.string(),
+  /** The working directory for the session. */
+  cwd: z.string(),
+});
+export interface InstantTaskPayload extends z.infer<
+  typeof InstantTaskPayload
+> {}
+
+/**
  * Discriminated union of all supported task payloads.
  */
 export const TaskPayload = z.discriminatedUnion("type", [
   InboundMessageTaskPayload,
   ScheduledTaskPayload,
+  InstantTaskPayload,
 ]);
-export type TaskPayload = InboundMessageTaskPayload | ScheduledTaskPayload;
+export type TaskPayload =
+  | InboundMessageTaskPayload
+  | ScheduledTaskPayload
+  | InstantTaskPayload;
