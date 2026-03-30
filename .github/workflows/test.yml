@@ -14,4 +14,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - name: Setup test config
+        run: |
+          mkdir -p ~/.agentara
+          cat > ~/.agentara/config.yaml << 'EOF'
+          agents:
+            default:
+              type: claude-code
+              model: claude-sonnet-4-6
+          tasking:
+            max_retries: 3
+          messaging:
+            default_channel_id: test-channel
+            channels: []
+          EOF
       - run: bun test

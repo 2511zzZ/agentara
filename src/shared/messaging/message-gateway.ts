@@ -7,6 +7,8 @@ import type { AssistantMessage, UserMessage } from "./types";
 export interface MessageGatewayEventTypes {
   // eslint-disable-next-line no-unused-vars
   "message:inbound": (message: UserMessage) => void;
+  // eslint-disable-next-line no-unused-vars
+  "message:recalled": (messageId: string, channelId: string) => void;
 }
 
 /**

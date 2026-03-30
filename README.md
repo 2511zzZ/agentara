@@ -84,21 +84,18 @@ Meet Tara, your 24/7 personal assistant powered by Claude Code and OpenAI Codex.
 
 ## Quick Start
 
+First, clone the repo and install all its dependencies.
+
 ```bash
-# Clone the repository
 git clone https://github.com/magiccube/agentara.git
-
-# Install dependencies
 cd agentara
-bun install
+make install
+```
 
-# Install frontend dependencies
-cd web
-bun install
+Then, run in DEVELOPMENT mode. Both backend server and frontend website will be launched.
 
-# Start both backend and frontend in dev mode
-cd ..
-bun run dev
+```bash
+make dev
 ```
 
 On first run, Agentara creates `~/.agentara` with default config, workspace, and data directories.
