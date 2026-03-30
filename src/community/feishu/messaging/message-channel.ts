@@ -205,7 +205,7 @@ export class FeishuMessageChannel
       data: {
         content: JSON.stringify({
           type: "text",
-          text: `[${emojis[Math.floor(Math.random() * emojis.length)]}] Reply here to continue the conversation`,
+          text: `[${emojis[Math.floor(Math.random() * emojis.length)]}] @我 继续对话`,
         }),
         msg_type: "text",
         reply_in_thread: true,
@@ -585,6 +585,7 @@ export class FeishuMessageChannel
           messageId,
           receivedMessage.message_type,
           receivedMessage.content,
+          receivedMessage.mentions,
         ),
       ],
     };
@@ -630,12 +631,19 @@ export class FeishuMessageChannel
     messageId: string,
     type: string,
     content: string,
+    mentions?: MessageReceiveEventData["message"]["mentions"],
   ): Promise<TextMessageContent> {
     const json = JSON.parse(content);
     if (type === "text") {
+      let text: string = json.text;
+      if (mentions) {
+        for (const m of mentions) {
+          text = text.replaceAll(m.key, `@${m.name}`);
+        }
+      }
       return {
         type: "text",
-        text: json.text,
+        text,
       };
     } else if (type === "post") {
       const markdown = await convertPostToMarkdown(
