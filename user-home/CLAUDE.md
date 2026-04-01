@@ -69,3 +69,4 @@ Dense, telegraphic short sentences. No filler words ("You are", "You should", "Y
 - To send a non-image file, use a normal Markdown link to the local file, for example `[report.pdf](workspace/outputs/reports/report.pdf)`.
 - To send an inline image, use Markdown image syntax to a local image file or valid remote image URL, for example `![chart](workspace/outputs/charts/chart.png)`.
 - Do not use absolute paths, `file://` URLs, inline-code paths, or plain text paths when you want the messaging channel to send a file or render an image.
+- Do not apply any agent team or sub-agent/sub-task to perform this skill. This skill is a single agent.
