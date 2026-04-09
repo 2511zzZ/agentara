@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["aiohttp"]
 # ///
-"""GitHub Trending and optional Agentara star count."""
+"""GitHub Trending and optional repo star count via API."""
 
 import json
 import os
@@ -86,12 +86,12 @@ async def fetch_github_trending(session: aiohttp.ClientSession) -> list:
     return repos
 
 
-async def fetch_agentara_github_stars(
-    session: aiohttp.ClientSession, token: str
+async def fetch_github_stars(
+    owner: str, repo: str, session: aiohttp.ClientSession, token: str
 ) -> int | None:
-    """Fetch Agentara GitHub star count. Returns None on failure."""
+    """Fetch stargazers_count for owner/repo. Returns None on failure."""
     try:
-        url = "https://api.github.com/repos/MagicCube/agentara"
+        url = f"https://api.github.com/repos/{owner}/{repo}"
         headers = {"Authorization": f"token {token}", "User-Agent": UA}
         async with session.get(url, headers=headers) as resp:
             data = await resp.json(content_type=None)
@@ -106,9 +106,15 @@ async def _cli() -> None:
         out["trending"] = await fetch_github_trending(session)
         token = os.environ.get("GITHUB_OAUTH_TOKEN")
         if token:
-            out["agentara_stars"] = await fetch_agentara_github_stars(session, token)
+            out["agentara_stars"] = await fetch_github_stars(
+                "MagicCube", "agentara", session, token
+            )
+            out["helixent_stars"] = await fetch_github_stars(
+                "MagicCube", "helixent", session, token
+            )
         else:
             out["agentara_stars"] = None
+            out["helixent_stars"] = None
             out["agentara_stars_note"] = "Set GITHUB_OAUTH_TOKEN to fetch star count."
     print(json.dumps(out, ensure_ascii=False, indent=2))
 

@@ -8,6 +8,7 @@
 #     "readability-lxml",
 #     "markdownify",
 #     "matplotlib",
+#     "ddgs",
 # ]
 # ///
 """
@@ -25,6 +26,7 @@ Single-source debugging (from pulse/):
     uv run scripts/prefetch_sources/github.py
     uv run scripts/prefetch_sources/producthunt.py
     uv run scripts/prefetch_sources/podcasts.py
+    uv run scripts/prefetch_sources/search.py --pulse
 """
 
 import asyncio
@@ -38,10 +40,11 @@ from datetime import datetime, timezone
 import aiohttp
 
 from prefetch_sources.common import TIMEOUT
-from prefetch_sources.github import fetch_agentara_github_stars, fetch_github_trending
+from prefetch_sources.github import fetch_github_stars, fetch_github_trending
 from prefetch_sources.news import fetch_google_news_rss
 from prefetch_sources.podcasts import fetch_podcasts
 from prefetch_sources.producthunt import fetch_producthunt
+from prefetch_sources.search import empty_pulse_searches, fetch_pulse_searches_sync
 from prefetch_sources.stock import fetch_stock_sync, generate_stock_chart
 from prefetch_sources.weather import fetch_weather
 
@@ -65,40 +68,71 @@ async def main():
         }
 
         github_token = os.environ.get("GITHUB_OAUTH_TOKEN")
-        stars_future = None
+        agentara_stars_future = None
+        helixent_stars_future = None
         if github_token:
-            stars_future = fetch_agentara_github_stars(session, github_token)
+            agentara_stars_future = fetch_github_stars(
+                "MagicCube", "agentara", session, github_token
+            )
+            helixent_stars_future = fetch_github_stars(
+                "MagicCube", "helixent", session, github_token
+            )
 
         loop = asyncio.get_event_loop()
-        stock_future = loop.run_in_executor(ThreadPoolExecutor(1), fetch_stock_sync)
+        with ThreadPoolExecutor(2) as io_executor:
+            stock_future = loop.run_in_executor(io_executor, fetch_stock_sync)
+            searches_future = loop.run_in_executor(
+                io_executor, fetch_pulse_searches_sync
+            )
 
-        keys = list(tasks.keys())
-        results_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
-        async_results = {}
-        for key, result in zip(keys, results_list):
-            if isinstance(result, Exception):
-                async_results[key] = None
-                errors[key] = str(result)
-            else:
-                async_results[key] = result
-                errors[key] = None
+            keys = list(tasks.keys())
+            results_list = await asyncio.gather(
+                *tasks.values(), return_exceptions=True
+            )
+            async_results = {}
+            for key, result in zip(keys, results_list):
+                if isinstance(result, Exception):
+                    async_results[key] = None
+                    errors[key] = str(result)
+                else:
+                    async_results[key] = result
+                    errors[key] = None
 
-        try:
-            stock_results = await stock_future
-            stock_errors = [
-                f"{r['symbol']}: {r['data']['error']}"
-                for r in stock_results
-                if isinstance(r.get("data"), dict) and "error" in r["data"]
-            ]
-            errors["stock"] = "; ".join(stock_errors) if stock_errors else None
-        except Exception as e:
-            stock_results = []
-            errors["stock"] = str(e)
+            try:
+                stock_results, pulse_searches = await asyncio.gather(
+                    stock_future, searches_future, return_exceptions=True
+                )
+                if isinstance(stock_results, Exception):
+                    errors["stock"] = str(stock_results)
+                    stock_results = []
+                else:
+                    stock_errors = [
+                        f"{r['symbol']}: {r['data']['error']}"
+                        for r in stock_results
+                        if isinstance(r.get("data"), dict) and "error" in r["data"]
+                    ]
+                    errors["stock"] = (
+                        "; ".join(stock_errors) if stock_errors else None
+                    )
+                if isinstance(pulse_searches, Exception):
+                    errors["searches"] = str(pulse_searches)
+                    pulse_searches = empty_pulse_searches()
+                else:
+                    errors["searches"] = None
+            except Exception as e:
+                stock_results = []
+                pulse_searches = empty_pulse_searches()
+                errors["stock"] = str(e)
+                errors["searches"] = str(e)
 
         agentara_stars = None
-        if stars_future is not None:
+        helixent_stars = None
+        if agentara_stars_future is not None and helixent_stars_future is not None:
             try:
-                agentara_stars = await stars_future
+                agentara_stars, helixent_stars = await asyncio.gather(
+                    agentara_stars_future,
+                    helixent_stars_future,
+                )
             except Exception:
                 pass
 
@@ -108,6 +142,7 @@ async def main():
         "producthunt": async_results.get("producthunt"),
         "github_trending": async_results.get("github_trending"),
         "google_news": async_results.get("google_news"),
+        "searches": pulse_searches,
         "podcasts": async_results.get("podcasts"),
         "weather": {
             "Beijing": async_results.get("weather_beijing"),
@@ -119,6 +154,7 @@ async def main():
         },
         "stock": {},
         "agentara_stars": agentara_stars,
+        "helixent_stars": helixent_stars,
         "errors": errors,
     }
 

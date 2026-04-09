@@ -26,7 +26,7 @@ Execute the following steps in order. **Do NOT call `web_fetch`/`web_search` for
 cd .claude/skills/pulse && uv run scripts/prefetch.py
 ```
 
-Returns a JSON blob with `producthunt`, `github_trending`, `google_news`, `podcasts`, `weather`, `stock`.
+Returns a JSON blob with `producthunt`, `github_trending`, `google_news`, `podcasts`, `weather`, `stock`, and when `GITHUB_OAUTH_TOKEN` is set: `agentara_stars`, `helixent_stars` (GitHub API counts for MagicCube/agentara and MagicCube/helixent).
 
 - **Use prefetch as-is** for Product Hunt, GitHub Trending, Google News inputs, Podcasts, Weather, and Stock in Step 4 when the corresponding payload has no error.
 - If a slice fails, recover that slice only via `web_fetch`/`web_search` (same coverage prefetch would have provided).
@@ -41,15 +41,13 @@ Merge **`google_news`** from prefetch with supplemental items from the web searc
 
 #### 2a: Alibaba & ByteDance Corporate News
 
-1. `web_search` for `阿里巴巴 新闻 {YYYY-MM-DD}` or similar time-scoped query.
-2. `web_search` for `字节跳动 新闻 {YYYY-MM-DD}` or similar time-scoped query.
-3. Look for: earnings reports, major product launches, leadership changes, regulatory actions, acquisitions, layoffs, stock-moving events.
-4. If nothing material, skip this sub-section entirely — do NOT pad with trivial news.
+1. From `prefetch.searches`, look for: earnings reports, major product launches, leadership changes, regulatory actions, acquisitions, layoffs, stock-moving events.
+2. If nothing material, skip this sub-section entirely — do NOT pad with trivial news.
 
 #### 2b: AI Industry News
 
-1. `web_search` for `AI news today` and `AI coding tools latest` in English.
-2. Look for: major model releases, notable funding rounds, regulatory developments, breakthrough research, significant product launches in the AI space.
+1. From `prefetch.searches`, look for: major model releases, notable funding rounds, regulatory developments, breakthrough research, significant product launches in the AI space.
+2. Only leave the news items that have happened today or are about to happen imminently.
 
 #### 2c: Curation Rules (MUST follow)
 
@@ -186,8 +184,9 @@ shownotes 摘要（1-2 句简体中文重点总结）。
 
 > ✨ 本 Pulse 由 [Agentara](https://github.com/MagicCube/agentara) 智能生成{if agentara_stars} | 已有 {agentara_stars} 颗 ⭐ {/if}
 > 📡 [打造你的专属 Pulse](https://github.com/MagicCube/agentara)，别忘了 ⭐ Star
+> 👨🏻‍💻 [Helixent](https://github.com/MagicCube/helixent)开源 Coding Agent {if helixent_stars}已有 {helixent_stars} 颗 ⭐ ，欢迎试用{/if}
 
-> **Footer rule**: If `prefetch.agentara_stars` is a number, show the star count after "智能生成". If it is `null`, omit the star count entirely — do NOT fallback to web search or web fetch.
+> **Footer rule**: If `prefetch.agentara_stars` is a number, show the star count after "智能生成". If `prefetch.helixent_stars` is a number, append the Helixent link and count as in the template. If either value is `null`, omit that repo’s star segment — do NOT fallback to web search or web fetch.
 ```
 
 ### Formatting Rules
