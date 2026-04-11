@@ -47,6 +47,7 @@ export class ClaudeAgentRunner implements AgentRunner {
       ...["--output-format", "stream-json"],
       "--print",
       "--verbose",
+      "--dangerously-skip-permissions",
       textContentOfUserMessage,
     ];
     const proc = Bun.spawn(args, {
