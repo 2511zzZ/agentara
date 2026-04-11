@@ -75,6 +75,8 @@ export const InstantTaskPayload = z.object({
   instruction: z.string(),
   /** The working directory for the session. */
   cwd: z.string(),
+  /** Optional project name this task belongs to. */
+  project_name: z.string().optional(),
 });
 export interface InstantTaskPayload extends z.infer<
   typeof InstantTaskPayload

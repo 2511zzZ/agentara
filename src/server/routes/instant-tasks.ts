@@ -15,6 +15,8 @@ const InstantTaskBody = z.object({
   instruction: z.string(),
   /** The working directory for the session. */
   cwd: z.string(),
+  /** Optional project name this task belongs to. */
+  project_name: z.string().optional(),
 });
 
 /**
@@ -30,6 +32,7 @@ export const instantTaskRoutes = new Hono().post(
       type: "instant_task",
       instruction: body.instruction,
       cwd: body.cwd,
+      project_name: body.project_name,
     });
     return c.json({ ok: true, task_id: taskId, session_id: sessionId }, 202);
   },
