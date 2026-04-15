@@ -15,6 +15,7 @@ import {
 import { HonoServer } from "../server";
 
 import { MultiChannelMessageGateway } from "./messaging";
+import type { Session } from "./sessioning";
 import { SessionManager } from "./sessioning";
 import * as sessioningSchema from "./sessioning/data";
 import { TaskDispatcher } from "./tasking";
@@ -165,8 +166,55 @@ class Kernel {
     }
   };
 
+  /**
+   * Stream a session's output into a Feishu message, updating it progressively.
+   * Shared by inbound, instant, and scheduled task handlers.
+   *
+   * @param session - The resolved session to stream from.
+   * @param userMessage - The user (or synthetic) message to send to the agent.
+   * @param anchorMessageId - The Feishu message ID to update with streamed content.
+   * @param signal - Optional abort signal.
+   * @returns The final assistant message content array.
+   */
+  private _streamToMessage = async (
+    session: Session,
+    userMessage: UserMessage,
+    anchorMessageId: string,
+    signal?: AbortSignal,
+  ): Promise<AssistantMessage["content"]> => {
+    const contents: AssistantMessage["content"] = [];
+    const stream = await session.stream(userMessage, { signal });
+    for await (const message of stream) {
+      if (message.role === "assistant") {
+        contents.push(...message.content);
+        await this._messageGateway.updateMessageContent(
+          {
+            id: anchorMessageId,
+            role: "assistant",
+            session_id: session.id,
+            content: contents,
+          },
+          { streaming: true },
+        );
+      }
+    }
+    if (contents.length === 0) {
+      throw new Error("No assistant message received from the agent.");
+    }
+    await this._messageGateway.updateMessageContent(
+      {
+        id: anchorMessageId,
+        role: "assistant",
+        session_id: session.id,
+        content: contents,
+      },
+      { streaming: false },
+    );
+    return contents;
+  };
+
   private _handleInboundMessageTask = async (
-    taskId: string,
+    _taskId: string,
     sessionId: string,
     payload: InboundMessageTaskPayload,
     signal?: AbortSignal,
@@ -176,47 +224,16 @@ class Kernel {
       channelId: inboundMessage.channel_id,
       firstMessage: inboundMessage,
     });
-    let contents: AssistantMessage["content"] = [
-      {
-        type: "thinking",
-        thinking: "Thinking...",
-      },
-    ];
     const outboundMessage = await this._messageGateway.replyMessage(
       inboundMessage.id,
       {
         role: "assistant",
         session_id: session.id,
-        content: contents,
+        content: [{ type: "thinking", thinking: "Thinking..." }],
       },
-      {
-        streaming: true,
-      },
+      { streaming: true },
     );
-    contents = [];
-    const stream = await session.stream(inboundMessage, { signal });
-    let lastMessage: AssistantMessage | undefined;
-    for await (const message of stream) {
-      if (message.role === "assistant") {
-        contents.push(...message.content);
-        await this._messageGateway.updateMessageContent(
-          { ...outboundMessage, content: contents },
-          {
-            streaming: true,
-          },
-        );
-        lastMessage = message;
-      }
-    }
-    if (!lastMessage) {
-      throw new Error("No assistant message received from the agent.");
-    }
-    await this._messageGateway.updateMessageContent(
-      { ...outboundMessage, content: contents },
-      {
-        streaming: false,
-      },
-    );
+    await this._streamToMessage(session, inboundMessage, outboundMessage.id, signal);
   };
 
   private _handleScheduledTask = async (
@@ -249,11 +266,22 @@ ${instruction}`,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    const assistantMessage = await session.run(userMessage, { signal });
-    if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
-      return;
+    const anchor = await this._messageGateway.sendDirectMessage(defaultChannelId, {
+      role: "assistant",
+      session_id: session.id,
+      content: [{ type: "thinking", thinking: "Thinking..." }],
+    });
+    const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
+    if (
+      contents
+        .filter((c): c is { type: "text"; text: string } => c.type === "text")
+        .some((c) => c.text.includes("[SKIPPED]"))
+    ) {
+      await this._messageGateway.updateMessageContent(
+        { ...anchor, content: [{ type: "text", text: "Task skipped." }] },
+        { streaming: false },
+      );
     }
-    await this._messageGateway.sendDirectMessage(defaultChannelId, assistantMessage);
   };
 
   private _handleInstantTask = async (
@@ -283,11 +311,22 @@ ${payload.instruction}`,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    const assistantMessage = await session.run(userMessage, { signal });
-    if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
-      return;
+    const anchor = await this._messageGateway.sendDirectMessage(defaultChannelId, {
+      role: "assistant",
+      session_id: session.id,
+      content: [{ type: "thinking", thinking: "Thinking..." }],
+    });
+    const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
+    if (
+      contents
+        .filter((c): c is { type: "text"; text: string } => c.type === "text")
+        .some((c) => c.text.includes("[SKIPPED]"))
+    ) {
+      await this._messageGateway.updateMessageContent(
+        { ...anchor, content: [{ type: "text", text: "Task skipped." }] },
+        { streaming: false },
+      );
     }
-    await this._messageGateway.sendDirectMessage(defaultChannelId, assistantMessage);
   };
 }
 
