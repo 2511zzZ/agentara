@@ -40,6 +40,7 @@ export const ChannelConfig = z.object({
   name: z.string(),
   description: z.string(),
   params: ChannelParams,
+  project: z.string().optional(),
 });
 export interface ChannelConfig extends z.infer<typeof ChannelConfig> {}
 

@@ -21,6 +21,8 @@ export const ScheduledTaskPayload = z.object({
   type: z.literal("scheduled_task"),
   /** The instruction string sent to the agent. */
   instruction: z.string(),
+  /** Optional project name this task belongs to. */
+  project_name: z.string().optional(),
 });
 export interface ScheduledTaskPayload extends z.infer<
   typeof ScheduledTaskPayload

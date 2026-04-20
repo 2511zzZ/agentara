@@ -159,6 +159,19 @@ export class MultiChannelMessageGateway
   }
 
   /**
+   * Send a text reply in a thread, creating the thread if needed.
+   * Routes to the correct channel based on session `channel_id`.
+   */
+  async replyTextInThread(
+    messageId: string,
+    sessionId: string,
+    text: string,
+  ): Promise<void> {
+    const channel = this._resolveChannelForSession(sessionId);
+    await channel.replyTextInThread(messageId, sessionId, text);
+  }
+
+  /**
    * Looks up a registered channel by id.
    * @param channelId - The channel identifier.
    * @returns The matching MessageChannel.

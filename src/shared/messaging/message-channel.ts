@@ -65,4 +65,20 @@ export interface MessageChannel extends EventEmitter {
    */
   // eslint-disable-next-line no-unused-vars
   sendDirectMessage(message: Omit<AssistantMessage, "id">): Promise<AssistantMessage>;
+
+  /**
+   * Send a text reply in a thread, creating the thread if it doesn't exist.
+   * Also maps the thread to the session for future message routing.
+   * @param messageId - ID of the message to reply to.
+   * @param sessionId - Session ID to map to the thread.
+   * @param text - Plain text content (supports Feishu at-mention syntax).
+   */
+  replyTextInThread(
+    // eslint-disable-next-line no-unused-vars
+    messageId: string,
+    // eslint-disable-next-line no-unused-vars
+    sessionId: string,
+    // eslint-disable-next-line no-unused-vars
+    text: string,
+  ): Promise<void>;
 }

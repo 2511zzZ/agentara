@@ -11,6 +11,10 @@ import {
   type InstantTaskPayload,
   type ScheduledTaskPayload,
 } from "@/shared";
+import {
+  resolveChannelForProject,
+  resolveProjectForChannel,
+} from "@/shared/config/channel-project-registry";
 
 import { HonoServer } from "../server";
 
@@ -87,19 +91,35 @@ class Kernel {
 
   private _initMessageGateway(): void {
     this._messageGateway = new MultiChannelMessageGateway(this._database.db);
+    const defaultChannelId = config.messaging.default_channel_id;
+    let fallbackChannel: FeishuMessageChannel | undefined;
+    const siblingChannels: Array<{ chatId: string; channel: FeishuMessageChannel }> = [];
+
     for (const channel of config.messaging.channels) {
-      this._messageGateway.registerChannel(
-        new FeishuMessageChannel(
-          channel.id,
-          {
-            chatId: channel.params.chat_id!,
-            appId: channel.params.app_id!,
-            appSecret: channel.params.app_secret!,
-            ownerOpenId: channel.params.owner_open_id,
-          },
-          this._database.db,
-        ),
+      const isDefault = channel.id === defaultChannelId;
+      const feishuChannel = new FeishuMessageChannel(
+        channel.id,
+        {
+          chatId: channel.params.chat_id!,
+          appId: channel.params.app_id!,
+          appSecret: channel.params.app_secret!,
+          ownerOpenId: channel.params.owner_open_id,
+          fallback: isDefault,
+        },
+        this._database.db,
       );
+      if (isDefault) {
+        fallbackChannel = feishuChannel;
+      } else {
+        siblingChannels.push({ chatId: channel.params.chat_id!, channel: feishuChannel });
+      }
+      this._messageGateway.registerChannel(feishuChannel);
+    }
+
+    if (fallbackChannel) {
+      for (const { chatId, channel } of siblingChannels) {
+        fallbackChannel.registerSibling(chatId, channel);
+      }
     }
     this._messageGateway.on("message:inbound", this._handleInboundMessage);
     this._messageGateway.on("message:recalled", this._handleMessageRecall);
@@ -242,8 +262,11 @@ class Kernel {
     payload: ScheduledTaskPayload,
     signal?: AbortSignal,
   ) => {
-    const defaultChannelId = config.messaging.default_channel_id;
-    const { instruction, type: _taskType, ...scheduleMeta } = payload;
+    const defaultChannelId = payload.project_name
+      ? (resolveChannelForProject(payload.project_name) ??
+        config.messaging.default_channel_id)
+      : config.messaging.default_channel_id;
+    const { instruction, type: _taskType, project_name: _pn, ...scheduleMeta } = payload;
     void _taskType;
     const userMessage: UserMessage = {
       id: uuid(),
@@ -266,22 +289,33 @@ ${instruction}`,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    const anchor = await this._messageGateway.sendDirectMessage(defaultChannelId, {
-      role: "assistant",
+    const briefInstruction = instruction.slice(0, 200) + (instruction.length > 200 ? "..." : "");
+    const anchorMessage = {
+      role: "assistant" as const,
       session_id: session.id,
-      content: [{ type: "thinking", thinking: "Thinking..." }],
-    });
+      content: [
+        { type: "text" as const, text: `**⏳ Scheduled Task**\n> ${briefInstruction}` },
+      ],
+    };
+    const isProjectChannel = !!resolveProjectForChannel(defaultChannelId);
+    const anchor = isProjectChannel
+      ? await this._messageGateway.postMessage(anchorMessage)
+      : await this._messageGateway.sendDirectMessage(defaultChannelId, anchorMessage);
     const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
-    if (
-      contents
-        .filter((c): c is { type: "text"; text: string } => c.type === "text")
-        .some((c) => c.text.includes("[SKIPPED]"))
-    ) {
+    const skipped = contents
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
+      .some((c) => c.text.includes("[SKIPPED]"));
+    if (skipped) {
       await this._messageGateway.updateMessageContent(
         { ...anchor, content: [{ type: "text", text: "Task skipped." }] },
         { streaming: false },
       );
     }
+    await this._messageGateway.replyTextInThread(
+      anchor.id,
+      session.id,
+      skipped ? "Task skipped." : "✅ 在此话题下继续对话",
+    );
   };
 
   private _handleInstantTask = async (
@@ -290,12 +324,15 @@ ${instruction}`,
     payload: InstantTaskPayload,
     signal?: AbortSignal,
   ) => {
-    const defaultChannelId = config.messaging.default_channel_id;
+    const channelId = payload.project_name
+      ? (resolveChannelForProject(payload.project_name) ??
+        config.messaging.default_channel_id)
+      : config.messaging.default_channel_id;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",
       session_id: sessionId,
-      channel_id: defaultChannelId,
+      channel_id: channelId,
       content: [
         {
           type: "text",
@@ -311,22 +348,33 @@ ${payload.instruction}`,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    const anchor = await this._messageGateway.sendDirectMessage(defaultChannelId, {
-      role: "assistant",
+    const briefInstruction = payload.instruction.slice(0, 200) + (payload.instruction.length > 200 ? "..." : "");
+    const anchorMessage = {
+      role: "assistant" as const,
       session_id: session.id,
-      content: [{ type: "thinking", thinking: "Thinking..." }],
-    });
+      content: [
+        { type: "text" as const, text: `**⏳ Instant Task**\n> ${briefInstruction}` },
+      ],
+    };
+    const isProjectChannel = !!resolveProjectForChannel(channelId);
+    const anchor = isProjectChannel
+      ? await this._messageGateway.postMessage(anchorMessage)
+      : await this._messageGateway.sendDirectMessage(channelId, anchorMessage);
     const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
-    if (
-      contents
-        .filter((c): c is { type: "text"; text: string } => c.type === "text")
-        .some((c) => c.text.includes("[SKIPPED]"))
-    ) {
+    const skipped = contents
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
+      .some((c) => c.text.includes("[SKIPPED]"));
+    if (skipped) {
       await this._messageGateway.updateMessageContent(
         { ...anchor, content: [{ type: "text", text: "Task skipped." }] },
         { streaming: false },
       );
     }
+    await this._messageGateway.replyTextInThread(
+      anchor.id,
+      session.id,
+      skipped ? "Task skipped." : "✅ 在此话题下继续对话",
+    );
   };
 }
 

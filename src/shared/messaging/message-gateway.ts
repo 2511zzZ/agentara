@@ -68,4 +68,20 @@ export interface MessageGateway extends EventEmitter<MessageGatewayEventTypes> {
    */
   // eslint-disable-next-line no-unused-vars
   sendDirectMessage(channelId: string, message: Omit<AssistantMessage, "id">): Promise<AssistantMessage>;
+
+  /**
+   * Send a text reply in a thread, creating the thread if needed.
+   * Routes to the correct channel based on session `channel_id`.
+   * @param messageId - ID of the message to reply to.
+   * @param sessionId - Session ID for channel resolution and thread mapping.
+   * @param text - Plain text content.
+   */
+  replyTextInThread(
+    // eslint-disable-next-line no-unused-vars
+    messageId: string,
+    // eslint-disable-next-line no-unused-vars
+    sessionId: string,
+    // eslint-disable-next-line no-unused-vars
+    text: string,
+  ): Promise<void>;
 }

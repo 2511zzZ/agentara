@@ -3,8 +3,12 @@ import { existsSync, unlinkSync } from "node:fs";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { DrizzleDB } from "@/data";
-import { config, createLogger, extractTextContent, uuid } from "@/shared";
 import type { Session as SessionEntity, UserMessage } from "@/shared";
+import { config, createLogger, extractTextContent, uuid } from "@/shared";
+import {
+  resolveProjectCwd,
+  resolveProjectForChannel,
+} from "@/shared/config/channel-project-registry";
 
 import { sessions } from "./data";
 import { Session } from "./session";
@@ -108,8 +112,14 @@ export class SessionManager {
     }
 
     const agentType = options?.agentType ?? config.agents.default.type;
-    const cwd = options?.cwd ?? config.paths.home;
     const channelId = options?.channelId ?? null;
+    const projectName = channelId
+      ? resolveProjectForChannel(channelId) ?? null
+      : null;
+    const cwd =
+      options?.cwd ??
+      (projectName ? resolveProjectCwd(projectName) : null) ??
+      config.paths.home;
     const now = Date.now();
 
     this._db
@@ -119,6 +129,7 @@ export class SessionManager {
         agent_type: agentType,
         cwd,
         channel_id: channelId,
+        project_name: projectName,
         last_message_created_at: null,
         runner_session_id: null,
         created_at: now,

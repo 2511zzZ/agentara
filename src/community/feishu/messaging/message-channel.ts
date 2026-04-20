@@ -55,6 +55,31 @@ function _isFeishuBadRequestError(err: unknown): boolean {
   );
 }
 
+function _extractFeishuErrorReason(err: unknown): string | undefined {
+  if (!err || typeof err !== "object") {
+    return undefined;
+  }
+
+  const candidate = err as {
+    msg?: string;
+    message?: string;
+    response?: {
+      data?: {
+        msg?: string;
+        message?: string;
+      };
+    };
+  };
+
+  return (
+    candidate.response?.data?.msg ||
+    candidate.response?.data?.message ||
+    candidate.msg ||
+    candidate.message ||
+    undefined
+  );
+}
+
 /** Message channel implementation for Feishu (Lark) chat platform. */
 export class FeishuMessageChannel
   extends EventEmitter<MessageChannelEventTypes>
@@ -66,6 +91,8 @@ export class FeishuMessageChannel
   private _client: Client;
   private _db: DrizzleDB;
   private _failedCardUpdateMessages = new Set<string>();
+  private _siblingChatIds = new Set<string>();
+  private _siblings = new Map<string, FeishuMessageChannel>();
   private _logger: Logger;
 
   /**
@@ -80,6 +107,7 @@ export class FeishuMessageChannel
       appId: string;
       appSecret: string;
       ownerOpenId?: string;
+      fallback?: boolean;
     },
     db: DrizzleDB,
   ) {
@@ -100,14 +128,34 @@ export class FeishuMessageChannel
     });
   }
 
-  /** Start listening for inbound messages via WebSocket. */
+  setSiblingChatIds(chatIds: Set<string>) {
+    this._siblingChatIds = chatIds;
+  }
+
+  registerSibling(chatId: string, channel: FeishuMessageChannel) {
+    this._siblings.set(chatId, channel);
+  }
+
+  /** Start listening for inbound messages via WebSocket. Only the primary channel should call this. */
   async start() {
-    await this._inboundClient.start({
-      eventDispatcher: new EventDispatcher({}).register({
-        "im.message.receive_v1": this._handleMessageReceive,
-        "im.message.recalled_v1": this._handleMessageRecall,
-      }),
-    });
+    if (this.config.fallback) {
+      await this._inboundClient.start({
+        eventDispatcher: new EventDispatcher({}).register({
+          "im.message.receive_v1": this._handleMessageReceive,
+          "im.message.recalled_v1": this._handleMessageRecall,
+        }),
+      });
+    }
+  }
+
+  /** Inject an inbound message event from outside (used by the primary channel to dispatch to siblings). */
+  injectMessageEvent(data: MessageReceiveEventData) {
+    this._handleMessageReceive(data);
+  }
+
+  /** Inject a recall event from outside. */
+  injectRecallEvent(data: { message_id?: string; chat_id?: string; recall_time?: string; recall_type?: string }) {
+    this._handleMessageRecall(data);
   }
 
   /** Reply to a message in a Feishu chat thread. */
@@ -185,6 +233,25 @@ export class FeishuMessageChannel
     return this._postMessageTo("open_id", ownerOpenId, message);
   }
 
+  /** Send a text reply in a thread, creating the thread and mapping it to the session. */
+  async replyTextInThread(
+    messageId: string,
+    sessionId: string,
+    text: string,
+  ): Promise<void> {
+    const { data: replyData } = await this._client.im.message.reply({
+      path: { message_id: messageId },
+      data: {
+        content: JSON.stringify({ type: "text", text }),
+        msg_type: "text",
+        reply_in_thread: true,
+      },
+    });
+    if (replyData?.thread_id) {
+      this._mapThreadToSession(replyData.thread_id, sessionId);
+    }
+  }
+
   /** Update the content of an existing Feishu message. */
   async updateMessageContent(
     message: AssistantMessage,
@@ -224,7 +291,7 @@ export class FeishuMessageChannel
           { err, message_id: message.id, session_id: message.session_id },
           "Feishu card update failed with 400; sending fallback reply",
         );
-        await this._replyUpdateFailureMessage(message.id);
+        await this._replyUpdateFailureMessage(message.id, _extractFeishuErrorReason(err));
         return;
       }
       throw err;
@@ -420,26 +487,6 @@ export class FeishuMessageChannel
       await this._sendLocalFileAttachments(assistantMessage.id, lastText.text);
     }
 
-    const emoji =
-      THREAD_REPLY_EMOJIS[Math.floor(Math.random() * THREAD_REPLY_EMOJIS.length)];
-    const { data: replyData } = await this._client.im.message.reply({
-      path: {
-        message_id: assistantMessage.id,
-      },
-      data: {
-        content: JSON.stringify({
-          type: "text",
-          text: `[${emoji}] @我 继续对话`,
-        }),
-        msg_type: "text",
-        reply_in_thread: true,
-      },
-    });
-    if (replyData) {
-      const { thread_id: threadId } = replyData;
-      const sessionId = message.session_id;
-      this._mapThreadToSession(threadId!, sessionId);
-    }
     return assistantMessage;
   }
 
@@ -577,7 +624,8 @@ export class FeishuMessageChannel
     throw lastErr;
   }
 
-  private async _replyUpdateFailureMessage(messageId: string): Promise<void> {
+  private async _replyUpdateFailureMessage(messageId: string, reason?: string): Promise<void> {
+    const reasonSuffix = reason ? `\n原因：${reason}` : "";
     try {
       await this._client.im.message.reply({
         path: {
@@ -586,7 +634,7 @@ export class FeishuMessageChannel
         data: {
           msg_type: "text",
           content: JSON.stringify({
-            text: "抱歉，这条消息更新失败了，请稍后重试。",
+            text: `抱歉，这条消息更新失败了，请稍后重试。${reasonSuffix}`,
           }),
           reply_in_thread: true,
         },
@@ -611,6 +659,19 @@ export class FeishuMessageChannel
   private _handleMessageReceive = async ({
     message: receivedMessage,
   }: MessageReceiveEventData) => {
+    if (this.config.fallback) {
+      const sibling = this._siblings.get(receivedMessage.chat_id);
+      if (sibling) {
+        this._logger.info(
+          { from: this.id, to: sibling.id, chat_id: receivedMessage.chat_id },
+          "dispatching to sibling channel",
+        );
+        sibling.injectMessageEvent({ message: receivedMessage } as MessageReceiveEventData);
+        return;
+      }
+    } else {
+      if (receivedMessage.chat_id !== this.config.chatId) return;
+    }
     const { message_id: messageId, thread_id: threadId } = receivedMessage;
     const session_id = this._resolveSessionId(threadId);
     const userMessage: UserMessage = {
@@ -636,6 +697,7 @@ export class FeishuMessageChannel
     recall_type?: string;
   }) => {
     if (!data.message_id) return;
+    if (data.chat_id && data.chat_id !== this.config.chatId) return;
     this._logger.info({ message_id: data.message_id }, "message recalled");
     this.emit("message:recalled", data.message_id, this.id);
   };
