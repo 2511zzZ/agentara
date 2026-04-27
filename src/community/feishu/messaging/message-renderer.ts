@@ -81,13 +81,28 @@ export async function renderMessageCard(
       elements: [stepPanel],
     },
   };
-  for (const content of messageContent) {
-    if (content.type === "thinking") {
-      stepPanel.elements.push(_renderStep(content.thinking, "robot_outlined"));
-    } else if (content.type === "tool_use") {
-      _renderTool(content, stepPanel);
+  let pendingKey: string | null = null;
+  let pendingItems: typeof messageContent = [];
+  const flushPending = () => {
+    if (pendingKey && pendingItems.length > 0) {
+      _renderMergedSteps(pendingKey, pendingItems, stepPanel);
     }
+    pendingKey = null;
+    pendingItems = [];
+  };
+  for (const content of messageContent) {
+    const key = _getStepGroupKey(content);
+    if (key === null) {
+      flushPending();
+      continue;
+    }
+    if (key !== pendingKey) {
+      flushPending();
+      pendingKey = key;
+    }
+    pendingItems.push(content);
   }
+  flushPending();
   if (!streaming) {
     // Find the last text block (final response), not all text blocks
     const lastTextContent = messageContent.findLast((c) => c.type === "text");
@@ -316,6 +331,153 @@ function _renderStep(text: string, iconToken: string): DivElement {
       content: text,
     },
   };
+}
+
+/** Get grouping key for consecutive step merging. */
+function _getStepGroupKey(
+  content: AssistantMessage["content"][number],
+): string | null {
+  if (content.type === "thinking") return "thinking";
+  if (content.type === "tool_use") {
+    if (content.name === "ToolSearch") return null;
+    return content.name;
+  }
+  return null;
+}
+
+/** Render a group of consecutive same-type steps, merging if count > 1. */
+function _renderMergedSteps(
+  key: string,
+  items: AssistantMessage["content"],
+  stepPanel: CollapsiblePanel,
+) {
+  if (items.length === 1) {
+    const content = items[0]!;
+    if (content.type === "thinking") {
+      stepPanel.elements.push(_renderStep(content.thinking, "robot_outlined"));
+    } else if (content.type === "tool_use") {
+      _renderTool(content, stepPanel);
+    }
+    return;
+  }
+
+  if (key === "thinking") {
+    stepPanel.elements.push(
+      _renderStep(`Thinking (${items.length} rounds)`, "robot_outlined"),
+    );
+    return;
+  }
+
+  const toolItems = items.filter(
+    (i): i is ToolUseMessageContent => i.type === "tool_use",
+  );
+  const { icon, label, details } = _getMergedToolInfo(key, toolItems);
+
+  const maxShow = 3;
+  let text: string;
+  if (details.length === 0) {
+    text = label;
+  } else {
+    const shown = details.slice(0, maxShow).join(", ");
+    text =
+      details.length > maxShow
+        ? `${label}: ${shown} ... +${details.length - maxShow} more`
+        : `${label}: ${shown}`;
+  }
+  stepPanel.elements.push(_renderStep(text, icon));
+}
+
+function _getMergedToolInfo(
+  toolName: string,
+  items: ToolUseMessageContent[],
+): { icon: string; label: string; details: string[] } {
+  const n = items.length;
+  switch (toolName) {
+    case "Agent":
+    case "Task":
+      return { icon: "robot_outlined", label: `Run ${n} sub-agents`, details: [] };
+    case "Bash":
+      return {
+        icon: "computer_outlined",
+        label: `Run ${n} commands`,
+        details: items.map((i) => {
+          const b = i as BashToolUseMessageContent;
+          const s = b.input.description ?? b.input.command;
+          return s.length > 40 ? s.slice(0, 40) + "…" : s;
+        }),
+      };
+    case "Edit":
+      return {
+        icon: "edit_outlined",
+        label: `Edit ${n} files`,
+        details: items.map((i) =>
+          nodePath.basename((i as EditToolUseMessageContent).input.file_path),
+        ),
+      };
+    case "Glob":
+      return {
+        icon: "card-search_outlined",
+        label: `Search ${n} file patterns`,
+        details: items.map(
+          (i) => `"${(i as GlobToolUseMessageContent).input.pattern}"`,
+        ),
+      };
+    case "Grep":
+      return {
+        icon: "doc-search_outlined",
+        label: `Search ${n} text patterns`,
+        details: items.map(
+          (i) => `"${(i as GrepToolUseMessageContent).input.pattern}"`,
+        ),
+      };
+    case "Read":
+      return {
+        icon: "file-link-bitable_outlined",
+        label: `Read ${n} files`,
+        details: items.map((i) =>
+          nodePath.basename((i as ReadToolUseMessageContent).input.file_path),
+        ),
+      };
+    case "Write":
+      return {
+        icon: "edit_outlined",
+        label: `Write ${n} files`,
+        details: items.map((i) =>
+          nodePath.basename((i as WriteToolUseMessageContent).input.file_path),
+        ),
+      };
+    case "WebFetch":
+      return {
+        icon: "language_outlined",
+        label: `Fetch ${n} web pages`,
+        details: items.map((i) => {
+          const url = (i as WebFetchToolUseMessageContent).input.url;
+          return url.length > 50 ? url.slice(0, 50) + "…" : url;
+        }),
+      };
+    case "WebSearch":
+      return {
+        icon: "search_outlined",
+        label: `Search web ${n} times`,
+        details: items.map(
+          (i) => `"${(i as WebSearchToolUseMessageContent).input.query}"`,
+        ),
+      };
+    case "Skill":
+      return {
+        icon: "file-link-mindnote_outlined",
+        label: `Load ${n} skills`,
+        details: items.map(
+          (i) => `"${(i as SkillToolUseMessageContent).input.skill}"`,
+        ),
+      };
+    default:
+      return {
+        icon: "setting-inter_outlined",
+        label: `${toolName} (${n} calls)`,
+        details: [],
+      };
+  }
 }
 
 /**
