@@ -11,7 +11,8 @@ import { config } from "@/shared";
  */
 export const sessionRoutes = new Hono()
   .get("/", (c) => {
-    const sessions = kernel.sessionManager.querySessions();
+    const limit = Number(c.req.query("limit")) || undefined;
+    const sessions = kernel.sessionManager.querySessions({ limit });
     return c.json(sessions);
   })
   .delete("/:id", (c) => {

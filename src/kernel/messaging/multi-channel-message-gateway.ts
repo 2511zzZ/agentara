@@ -25,10 +25,23 @@ export class MultiChannelMessageGateway
   private _logger = createLogger("message-gateway");
   private _channels: Map<string, MessageChannel> = new Map();
   private _db: DrizzleDB;
+  private _onChannelMiss?: () => void;
 
   constructor(db: DrizzleDB) {
     super();
     this._db = db;
+  }
+
+  set onChannelMiss(handler: () => void) {
+    this._onChannelMiss = handler;
+  }
+
+  hasChannel(channelId: string): boolean {
+    return this._channels.has(channelId);
+  }
+
+  getChannel(channelId: string): MessageChannel | undefined {
+    return this._channels.get(channelId);
   }
 
   /**
@@ -178,7 +191,12 @@ export class MultiChannelMessageGateway
    * @throws If the channel is not registered.
    */
   private _resolveChannel(channelId: string): MessageChannel {
-    const channel = this._channels.get(channelId);
+    let channel = this._channels.get(channelId);
+    if (!channel && this._onChannelMiss) {
+      this._logger.info(`Channel "${channelId}" not found, reloading config...`);
+      this._onChannelMiss();
+      channel = this._channels.get(channelId);
+    }
     if (!channel) {
       throw new Error(`Channel "${channelId}" is not registered.`);
     }

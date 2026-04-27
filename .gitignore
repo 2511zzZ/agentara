@@ -36,3 +36,4 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # runtime (background server PID and log files)
 .run
 package-lock.json
+.agentara

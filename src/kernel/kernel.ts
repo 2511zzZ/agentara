@@ -6,12 +6,14 @@ import {
   config,
   createLogger,
   extractTextContent,
+  reloadConfig,
   uuid,
   type InboundMessageTaskPayload,
   type InstantTaskPayload,
   type ScheduledTaskPayload,
 } from "@/shared";
 import {
+  resetRegistry,
   resolveChannelForProject,
   resolveProjectForChannel,
 } from "@/shared/config/channel-project-registry";
@@ -121,8 +123,38 @@ class Kernel {
         fallbackChannel.registerSibling(chatId, channel);
       }
     }
+    this._messageGateway.onChannelMiss = () => this._reloadChannels();
     this._messageGateway.on("message:inbound", this._handleInboundMessage);
     this._messageGateway.on("message:recalled", this._handleMessageRecall);
+  }
+
+  private _reloadChannels(): void {
+    reloadConfig();
+    resetRegistry();
+
+    const defaultChannelId = config.messaging.default_channel_id;
+    const fallbackChannel = this._messageGateway.getChannel(defaultChannelId) as FeishuMessageChannel | undefined;
+
+    for (const channelConfig of config.messaging.channels) {
+      if (this._messageGateway.hasChannel(channelConfig.id)) continue;
+
+      this._logger.info(`Registering new channel from config: ${channelConfig.id}`);
+      const feishuChannel = new FeishuMessageChannel(
+        channelConfig.id,
+        {
+          chatId: channelConfig.params.chat_id!,
+          appId: channelConfig.params.app_id!,
+          appSecret: channelConfig.params.app_secret!,
+          ownerOpenId: channelConfig.params.owner_open_id,
+          fallback: false,
+        },
+        this._database.db,
+      );
+      this._messageGateway.registerChannel(feishuChannel);
+      if (fallbackChannel) {
+        fallbackChannel.registerSibling(channelConfig.params.chat_id!, feishuChannel);
+      }
+    }
   }
 
   /**
@@ -262,10 +294,14 @@ class Kernel {
     payload: ScheduledTaskPayload,
     signal?: AbortSignal,
   ) => {
-    const defaultChannelId = payload.project_name
-      ? (resolveChannelForProject(payload.project_name) ??
-        config.messaging.default_channel_id)
-      : config.messaging.default_channel_id;
+    let defaultChannelId = payload.project_name
+      ? resolveChannelForProject(payload.project_name)
+      : undefined;
+    if (!defaultChannelId && payload.project_name) {
+      this._reloadChannels();
+      defaultChannelId = resolveChannelForProject(payload.project_name);
+    }
+    defaultChannelId ??= config.messaging.default_channel_id;
     const { instruction, type: _taskType, project_name: _pn, ...scheduleMeta } = payload;
     void _taskType;
     const userMessage: UserMessage = {
@@ -324,10 +360,14 @@ ${instruction}`,
     payload: InstantTaskPayload,
     signal?: AbortSignal,
   ) => {
-    const channelId = payload.project_name
-      ? (resolveChannelForProject(payload.project_name) ??
-        config.messaging.default_channel_id)
-      : config.messaging.default_channel_id;
+    let channelId = payload.project_name
+      ? resolveChannelForProject(payload.project_name)
+      : undefined;
+    if (!channelId && payload.project_name) {
+      this._reloadChannels();
+      channelId = resolveChannelForProject(payload.project_name);
+    }
+    channelId ??= config.messaging.default_channel_id;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",

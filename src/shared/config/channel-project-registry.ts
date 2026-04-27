@@ -22,6 +22,12 @@ function ensureInit() {
   }
 }
 
+export function resetRegistry(): void {
+  channelToProject.clear();
+  projectToChannel.clear();
+  initialized = false;
+}
+
 export function resolveProjectForChannel(
   channelId: string,
 ): string | undefined {
