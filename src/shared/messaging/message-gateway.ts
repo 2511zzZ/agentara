@@ -58,4 +58,14 @@ export interface MessageGateway extends EventEmitter<MessageGatewayEventTypes> {
     // eslint-disable-next-line no-unused-vars
     options?: { streaming?: boolean },
   ): Promise<void>;
+
+  /**
+   * Send a direct message via the specified channel.
+   * Takes an explicit channelId rather than resolving from session.
+   * @param channelId - The channel to send through.
+   * @param message - The assistant message to send (without id).
+   * @returns The sent message with id assigned.
+   */
+  // eslint-disable-next-line no-unused-vars
+  sendDirectMessage(channelId: string, message: Omit<AssistantMessage, "id">): Promise<AssistantMessage>;
 }

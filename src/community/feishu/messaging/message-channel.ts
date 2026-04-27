@@ -22,6 +22,15 @@ import { renderMessageCard, splitMarkdownByTables } from "./message-renderer";
 import type { MessageReceiveEventData } from "./types";
 import { convertPostToMarkdown } from "./utils";
 
+const THREAD_REPLY_EMOJIS = [
+  "思考中",
+  "送你小红花",
+  "送心",
+  "灵光一现",
+  "辛勤营业",
+  "挥手",
+];
+
 function _isFeishuBadRequestError(err: unknown): boolean {
   if (!err || typeof err !== "object") {
     return false;
@@ -70,6 +79,7 @@ export class FeishuMessageChannel
       chatId: string;
       appId: string;
       appSecret: string;
+      ownerOpenId?: string;
     },
     db: DrizzleDB,
   ) {
@@ -157,67 +167,22 @@ export class FeishuMessageChannel
   async postMessage(
     message: Omit<AssistantMessage, "id">,
   ): Promise<AssistantMessage> {
-    const { firstMessageContent, remainingChunks } = this._prepareMessageContent(
-      message.content,
-      false,
-    );
+    return this._postMessageTo("chat_id", this.config.chatId, message);
+  }
 
-    const card = await renderMessageCard(firstMessageContent, {
-      streaming: false,
-      uploadImage: this.uploadImage.bind(this),
-    });
-    this._logOutboundMessage(message.session_id, message.content);
-    const { data } = await this._client.im.message.create({
-      params: {
-        receive_id_type: "chat_id",
-      },
-      data: {
-        receive_id: this.config.chatId,
-        msg_type: "interactive",
-        content: JSON.stringify(card),
-      },
-    });
-    if (!data) {
-      throw new Error("Failed to post message");
+  /**
+   * Send a direct message to the channel owner.
+   * @param message - The assistant message to send (without id).
+   * @returns The sent message with id assigned.
+   */
+  async sendDirectMessage(
+    message: Omit<AssistantMessage, "id">,
+  ): Promise<AssistantMessage> {
+    const ownerOpenId = this.config.ownerOpenId;
+    if (!ownerOpenId) {
+      throw new Error("owner_open_id is not configured for this channel");
     }
-    const { message_id: messageId } = data;
-    const assistantMessage = message as AssistantMessage;
-    assistantMessage.id = messageId!;
-
-    await this._sendRemainingChunks(assistantMessage.id, remainingChunks);
-
-    const lastText = message.content.filter((c) => c.type === "text").pop();
-    if (lastText?.type === "text") {
-      await this._sendLocalFileAttachments(assistantMessage.id, lastText.text);
-    }
-
-    const emojis = [
-      "思考中",
-      "送你小红花",
-      "送心",
-      "灵光一现",
-      "辛勤营业",
-      "挥手",
-    ];
-    const { data: replyData } = await this._client.im.message.reply({
-      path: {
-        message_id: assistantMessage.id,
-      },
-      data: {
-        content: JSON.stringify({
-          type: "text",
-          text: `[${emojis[Math.floor(Math.random() * emojis.length)]}] @我 继续对话`,
-        }),
-        msg_type: "text",
-        reply_in_thread: true,
-      },
-    });
-    if (replyData) {
-      const { thread_id: threadId } = replyData;
-      const sessionId = message.session_id;
-      this._mapThreadToSession(threadId!, sessionId);
-    }
-    return assistantMessage;
+    return this._postMessageTo("open_id", ownerOpenId, message);
   }
 
   /** Update the content of an existing Feishu message. */
@@ -405,6 +370,77 @@ export class FeishuMessageChannel
     filename += extname;
     await writeFile(nodePath.join(dir, filename));
     return nodePath.relative(config.paths.home, nodePath.join(dir, filename));
+  }
+
+  /**
+   * Shared implementation for posting a message to a Feishu recipient.
+   * Renders the message as a card, sends it, handles chunking, file attachments,
+   * and creates a thread with session mapping.
+   * @param receiveIdType - The Feishu receive ID type ("chat_id" or "open_id").
+   * @param receiveId - The recipient identifier.
+   * @param message - The assistant message to send (without id).
+   * @returns The sent message with id assigned.
+   */
+  private async _postMessageTo(
+    receiveIdType: "chat_id" | "open_id",
+    receiveId: string,
+    message: Omit<AssistantMessage, "id">,
+  ): Promise<AssistantMessage> {
+    const { firstMessageContent, remainingChunks } = this._prepareMessageContent(
+      message.content,
+      false,
+    );
+
+    const card = await renderMessageCard(firstMessageContent, {
+      streaming: false,
+      uploadImage: this.uploadImage.bind(this),
+    });
+    this._logOutboundMessage(message.session_id, message.content);
+    const { data } = await this._client.im.message.create({
+      params: {
+        receive_id_type: receiveIdType,
+      },
+      data: {
+        receive_id: receiveId,
+        msg_type: "interactive",
+        content: JSON.stringify(card),
+      },
+    });
+    if (!data) {
+      throw new Error("Failed to post message");
+    }
+    const { message_id: messageId } = data;
+    const assistantMessage = message as AssistantMessage;
+    assistantMessage.id = messageId!;
+
+    await this._sendRemainingChunks(assistantMessage.id, remainingChunks);
+
+    const lastText = message.content.filter((c) => c.type === "text").pop();
+    if (lastText?.type === "text") {
+      await this._sendLocalFileAttachments(assistantMessage.id, lastText.text);
+    }
+
+    const emoji =
+      THREAD_REPLY_EMOJIS[Math.floor(Math.random() * THREAD_REPLY_EMOJIS.length)];
+    const { data: replyData } = await this._client.im.message.reply({
+      path: {
+        message_id: assistantMessage.id,
+      },
+      data: {
+        content: JSON.stringify({
+          type: "text",
+          text: `[${emoji}] @我 继续对话`,
+        }),
+        msg_type: "text",
+        reply_in_thread: true,
+      },
+    });
+    if (replyData) {
+      const { thread_id: threadId } = replyData;
+      const sessionId = message.session_id;
+      this._mapThreadToSession(threadId!, sessionId);
+    }
+    return assistantMessage;
   }
 
   /**

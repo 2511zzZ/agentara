@@ -56,4 +56,13 @@ export interface MessageChannel extends EventEmitter {
     // eslint-disable-next-line no-unused-vars
     options?: { streaming?: boolean },
   ): Promise<void>;
+
+  /**
+   * Send a direct message to the channel owner.
+   * Renders the message as a card and creates a thread for continued conversation.
+   * @param message - The assistant message to send (without id).
+   * @returns The sent message with id assigned.
+   */
+  // eslint-disable-next-line no-unused-vars
+  sendDirectMessage(message: Omit<AssistantMessage, "id">): Promise<AssistantMessage>;
 }

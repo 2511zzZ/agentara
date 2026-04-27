@@ -94,6 +94,7 @@ class Kernel {
             chatId: channel.params.chat_id!,
             appId: channel.params.app_id!,
             appSecret: channel.params.app_secret!,
+            ownerOpenId: channel.params.owner_open_id,
           },
           this._database.db,
         ),
@@ -224,10 +225,9 @@ class Kernel {
     payload: ScheduledTaskPayload,
     signal?: AbortSignal,
   ) => {
-    const payload_without_instruction: { instruction?: string } = {
-      ...payload,
-    };
     const defaultChannelId = config.messaging.default_channel_id;
+    const { instruction, type: _taskType, ...scheduleMeta } = payload;
+    void _taskType;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",
@@ -238,28 +238,29 @@ class Kernel {
           type: "text",
           text: `> This message is automatically triggered by a scheduled task.
 > The time is now ${new Date().toString()}.
-> Cron expression: \`${JSON.stringify(payload_without_instruction)}\`
+> Cron expression: \`${JSON.stringify(scheduleMeta)}\`
 
-${payload.instruction}`,
+${instruction}`,
         },
       ],
     };
     const session = await this._sessionManager.resolveSession(sessionId, {
+      cwd: config.paths.home,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    delete payload_without_instruction.instruction;
     const assistantMessage = await session.run(userMessage, { signal });
     if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
       return;
     }
-    await this._messageGateway.postMessage(assistantMessage);
+    await this._messageGateway.sendDirectMessage(defaultChannelId, assistantMessage);
   };
 
   private _handleInstantTask = async (
     _taskId: string,
     sessionId: string,
     payload: InstantTaskPayload,
+    signal?: AbortSignal,
   ) => {
     const defaultChannelId = config.messaging.default_channel_id;
     const userMessage: UserMessage = {
@@ -282,8 +283,11 @@ ${payload.instruction}`,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
-    const assistantMessage = await session.run(userMessage);
-    await this._messageGateway.postMessage(assistantMessage);
+    const assistantMessage = await session.run(userMessage, { signal });
+    if (extractTextContent(assistantMessage).includes("[SKIPPED]")) {
+      return;
+    }
+    await this._messageGateway.sendDirectMessage(defaultChannelId, assistantMessage);
   };
 }
 

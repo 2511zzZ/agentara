@@ -108,6 +108,21 @@ export class MultiChannelMessageGateway
   }
 
   /**
+   * Send a direct message via the specified channel.
+   * Takes an explicit channelId rather than resolving from session.
+   * @param channelId - The channel to send through.
+   * @param message - The assistant message to send (without id).
+   * @returns The sent message with id assigned.
+   */
+  async sendDirectMessage(
+    channelId: string,
+    message: Omit<AssistantMessage, "id">,
+  ): Promise<AssistantMessage> {
+    const channel = this._resolveChannel(channelId);
+    return channel.sendDirectMessage(message);
+  }
+
+  /**
    * Handles an inbound message from a channel: sets the channel_id on the
    * message and re-emits `message:inbound`.
    */
