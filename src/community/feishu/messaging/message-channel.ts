@@ -143,6 +143,7 @@ export class FeishuMessageChannel
         eventDispatcher: new EventDispatcher({}).register({
           "im.message.receive_v1": this._handleMessageReceive,
           "im.message.recalled_v1": this._handleMessageRecall,
+          "card.action.trigger": this._handleCardAction,
         }),
       });
     }
@@ -700,6 +701,60 @@ export class FeishuMessageChannel
     if (data.chat_id && data.chat_id !== this.config.chatId) return;
     this._logger.info({ message_id: data.message_id }, "message recalled");
     this.emit("message:recalled", data.message_id, this.id);
+  };
+
+  private _handleCardAction = async (data: {
+    operator?: { open_id?: string; tenant_key?: string };
+    action?: {
+      form_value?: Record<string, unknown>;
+      value?: Record<string, unknown>;
+      tag?: string;
+    };
+    context?: {
+      open_message_id?: string;
+      open_chat_id?: string;
+    };
+  }): Promise<{ toast: { type: string; content: string } }> => {
+    const chatId = data.context?.open_chat_id;
+    const messageId = data.context?.open_message_id;
+    if (!chatId || !messageId) {
+      this._logger.warn({ data }, "card action missing chat_id or message_id");
+      return { toast: { type: "info", content: "缺少上下文" } };
+    }
+
+    if (this.config.fallback) {
+      const sibling = this._siblings.get(chatId);
+      if (sibling) {
+        this._logger.info(
+          { from: this.id, to: sibling.id, chat_id: chatId },
+          "dispatching card action to sibling channel",
+        );
+        return sibling._handleCardAction(data);
+      }
+    } else {
+      if (chatId !== this.config.chatId) {
+        return { toast: { type: "info", content: "OK" } };
+      }
+    }
+
+    const formValue = data.action?.form_value ?? data.action?.value ?? {};
+    const sessionId = uuid();
+
+    const textContent = JSON.stringify({
+      type: "card_action",
+      message_id: messageId,
+      form_value: formValue,
+    });
+
+    const userMessage: UserMessage = {
+      id: messageId,
+      session_id: sessionId,
+      role: "user",
+      content: [{ type: "text", text: textContent }],
+    };
+
+    this.emit("message:inbound", userMessage);
+    return { toast: { type: "success", content: "已收到" } };
   };
 
   private _threadIdToSessionId = new Map<string, string>();
