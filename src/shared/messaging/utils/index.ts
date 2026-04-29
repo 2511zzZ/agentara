@@ -89,7 +89,8 @@ export function extractTextContent(
 export function formatReplyContext(message: UserMessage): string {
   if (!("replyTo" in message) || !message.replyTo) return "";
   const sender = message.replyTo.sender ? ` sender="${message.replyTo.sender}"` : "";
-  return `<replying_to${sender}>\n${message.replyTo.content}\n</replying_to>\n\n`;
+  const msgId = ` message_id="${message.replyTo.messageId}"`;
+  return `<replying_to${sender}${msgId}>\n${message.replyTo.content}\n</replying_to>\n\n`;
 }
 
 function extractToolUse(content: ToolUseMessageContent): string {
