@@ -14,6 +14,7 @@ import {
   type AssistantMessage,
   type MessageChannel,
   type MessageChannelEventTypes,
+  type ReplyContext,
   type UserMessage,
 } from "@/shared";
 
@@ -648,6 +649,86 @@ export class FeishuMessageChannel
     }
   }
 
+  /**
+   * Fetch a source message by ID from Feishu API and extract readable text content.
+   * Never throws — returns null on failure so it doesn't block session creation.
+   */
+  private async _fetchSourceMessage(
+    messageId: string,
+  ): Promise<{ content: string; sender?: string } | null> {
+    try {
+      const resp = await this._client.im.message.get({
+        path: { message_id: messageId },
+      });
+      const item = resp?.data?.items?.[0];
+      if (!item) {
+        this._logger.warn({ messageId }, "source message not found");
+        return null;
+      }
+      const content = this._extractReadableContent(
+        item.msg_type,
+        item.body?.content,
+      );
+      if (!content) {
+        this._logger.warn({ messageId, msgType: item.msg_type }, "could not extract readable content from source message");
+        return null;
+      }
+      return {
+        content,
+        sender: item.sender?.id,
+      };
+    } catch (err) {
+      this._logger.warn({ err, messageId }, "failed to fetch source message");
+      return null;
+    }
+  }
+
+  /**
+   * Parse Feishu message content JSON based on message type and return readable text.
+   * Returns null if content cannot be extracted.
+   */
+  private _extractReadableContent(
+    msgType: string | undefined,
+    rawContent: string | undefined,
+  ): string | null {
+    if (!rawContent) return null;
+    try {
+      const parsed = JSON.parse(rawContent);
+      switch (msgType) {
+        case "text":
+          return parsed.text ?? null;
+        case "post": {
+          // Rich text structure: { zh_cn: { title, content: [[{ tag, text, ... }]] } }
+          const lang = parsed.zh_cn ?? parsed.en_us ?? Object.values(parsed)[0];
+          if (!lang) return null;
+          const parts: string[] = [];
+          if (lang.title) parts.push(lang.title);
+          if (Array.isArray(lang.content)) {
+            for (const paragraph of lang.content) {
+              if (!Array.isArray(paragraph)) continue;
+              for (const node of paragraph) {
+                if (node.tag === "text" && node.text) {
+                  parts.push(node.text);
+                } else if (node.tag === "a") {
+                  parts.push(node.text ?? node.href ?? "");
+                } else if (node.tag === "at" && node.user_name) {
+                  parts.push(`@${node.user_name}`);
+                }
+              }
+            }
+          }
+          return parts.length > 0 ? parts.join(" ") : null;
+        }
+        case "interactive":
+          return parsed.header?.title?.content ?? "[interactive card]";
+        default:
+          return `[${msgType ?? "unknown"} message]`;
+      }
+    } catch {
+      return null;
+    }
+  }
+
   private _logOutboundMessage(
     sessionId: string,
     content: AssistantMessage["content"],
@@ -673,8 +754,67 @@ export class FeishuMessageChannel
     } else {
       if (receivedMessage.chat_id !== this.config.chatId) return;
     }
-    const { message_id: messageId, thread_id: threadId } = receivedMessage;
+    const {
+      message_id: messageId,
+      thread_id: threadId,
+      parent_id: parentId,
+      root_id: rootId,
+    } = receivedMessage;
+
+    this._logger.info(
+      { messageId, threadId, parentId, rootId },
+      "inbound message thread fields",
+    );
+
     const session_id = this._resolveSessionId(threadId);
+
+    // Determine reply context from parent_id / root_id
+    let replyTo: ReplyContext | undefined;
+
+    let sourceMessageId: string | undefined;
+    let replyType: "parent" | "root" | undefined;
+
+    if (parentId && rootId) {
+      this._logger.warn(
+        { messageId, parentId, rootId },
+        "message has both parent_id and root_id; preferring parent_id",
+      );
+      sourceMessageId = parentId;
+      replyType = "parent";
+    } else if (parentId) {
+      sourceMessageId = parentId;
+      replyType = "parent";
+    } else if (rootId) {
+      sourceMessageId = rootId;
+      replyType = "root";
+    }
+
+    if (sourceMessageId && replyType) {
+      const sourceMessage = await this._fetchSourceMessage(sourceMessageId);
+      if (sourceMessage) {
+        replyTo = {
+          messageId: sourceMessageId,
+          content: sourceMessage.content,
+          sender: sourceMessage.sender,
+          replyType,
+        };
+        this._logger.info(
+          {
+            messageId,
+            sourceMessageId,
+            replyType,
+            contentPreview: sourceMessage.content.slice(0, 80),
+          },
+          "replyTo populated",
+        );
+      } else {
+        this._logger.info(
+          { messageId, sourceMessageId, replyType },
+          "replyTo skipped: source message fetch returned null",
+        );
+      }
+    }
+
     const userMessage: UserMessage = {
       id: messageId,
       session_id,
@@ -687,6 +827,7 @@ export class FeishuMessageChannel
           receivedMessage.mentions,
         ),
       ],
+      ...(replyTo ? { replyTo } : {}),
     };
     this.emit("message:inbound", userMessage);
   };
