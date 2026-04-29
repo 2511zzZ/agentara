@@ -40,12 +40,25 @@ export const SystemMessage = BaseMessage.extend({
 export interface SystemMessage extends z.infer<typeof SystemMessage> {}
 
 /**
+ * Context carried from a replied-to message.
+ */
+export const ReplyContext = z.object({
+  messageId: z.string(),
+  content: z.string(),
+  sender: z.string().optional(),
+  replyType: z.enum(["parent", "root"]),
+});
+export interface ReplyContext extends z.infer<typeof ReplyContext> {}
+
+/**
  * The user message.
  */
 export const UserMessage = BaseMessage.extend({
   role: z.literal("user"),
   /** The channel id this message originated from. */
   channel_id: z.string().optional(),
+  /** Context from the message being replied to, if any. */
+  replyTo: ReplyContext.optional(),
   content: z.array(
     z.discriminatedUnion("type", [
       TextMessageContent,
