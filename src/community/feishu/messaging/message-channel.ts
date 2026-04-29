@@ -23,15 +23,6 @@ import { renderMessageCard, splitMarkdownByTables } from "./message-renderer";
 import type { MessageReceiveEventData } from "./types";
 import { convertPostToMarkdown } from "./utils";
 
-const THREAD_REPLY_EMOJIS = [
-  "思考中",
-  "送你小红花",
-  "送心",
-  "灵光一现",
-  "辛勤营业",
-  "挥手",
-];
-
 function _isFeishuBadRequestError(err: unknown): boolean {
   if (!err || typeof err !== "object") {
     return false;
@@ -96,11 +87,6 @@ export class FeishuMessageChannel
   private _siblings = new Map<string, FeishuMessageChannel>();
   private _logger: Logger;
 
-  /**
-   * Create a Feishu message channel.
-   * @param config - Feishu app credentials (defaults to env vars).
-   * @param db - Drizzle database instance for persisting thread-to-session mappings.
-   */
   constructor(
     readonly id: string,
     readonly config: {
@@ -192,9 +178,9 @@ export class FeishuMessageChannel
       throw new Error("Failed to reply message");
     }
 
-    const { thread_id: threadId } = replyMessage;
-    const sessionId = message.session_id;
-    this._mapThreadToSession(threadId!, sessionId);
+    if (replyMessage.thread_id) {
+      this._mapThreadToSession(replyMessage.thread_id, message.session_id);
+    }
 
     await this._sendRemainingChunks(replyMessage.message_id!, remainingChunks);
 
@@ -235,12 +221,7 @@ export class FeishuMessageChannel
     return this._postMessageTo("open_id", ownerOpenId, message);
   }
 
-  /** Send a text reply in a thread, creating the thread and mapping it to the session. */
-  async replyTextInThread(
-    messageId: string,
-    sessionId: string,
-    text: string,
-  ): Promise<void> {
+  async replyTextInThread(messageId: string, sessionId: string, text: string): Promise<void> {
     const { data: replyData } = await this._client.im.message.reply({
       path: { message_id: messageId },
       data: {
@@ -659,6 +640,7 @@ export class FeishuMessageChannel
     try {
       const resp = await this._client.im.message.get({
         path: { message_id: messageId },
+        params: { card_msg_content_type: "user_card_content" } as Record<string, string>,
       });
       const item = resp?.data?.items?.[0];
       if (!item) {
@@ -728,8 +710,31 @@ export class FeishuMessageChannel
           }
           return parts.length > 0 ? parts.join(" ") : null;
         }
-        case "interactive":
-          return parsed.header?.title?.content ?? "[interactive card]";
+        case "interactive": {
+          const cardParts: string[] = [];
+          if (parsed.header?.title?.content) cardParts.push(parsed.header.title.content);
+          const extractElements = (elements: unknown[]) => {
+            for (const el of elements as Array<Record<string, unknown>>) {
+              if (!el?.tag) continue;
+              if (el.tag === "markdown" && el.content) {
+                cardParts.push(el.content as string);
+              } else if (el.tag === "div" && (el.text as Record<string, unknown>)?.content) {
+                cardParts.push((el.text as Record<string, unknown>).content as string);
+              } else if (el.tag === "column_set" && Array.isArray(el.columns)) {
+                for (const col of el.columns as Array<Record<string, unknown>>) {
+                  if (Array.isArray(col.elements)) extractElements(col.elements);
+                }
+              } else if (el.tag === "note" && Array.isArray(el.elements)) {
+                for (const n of el.elements as Array<Record<string, unknown>>) {
+                  if (n.content) cardParts.push(n.content as string);
+                  if (n.text) cardParts.push(n.text as string);
+                }
+              }
+            }
+          };
+          if (Array.isArray(parsed.elements)) extractElements(parsed.elements);
+          return cardParts.length > 0 ? cardParts.join("\n") : "[interactive card]";
+        }
         default:
           return `[${msgType ?? "unknown"} message]`;
       }
@@ -909,7 +914,6 @@ export class FeishuMessageChannel
 
   private _threadIdToSessionId = new Map<string, string>();
 
-  /** Persist a thread→session mapping to DB and update the in-memory cache. */
   private _mapThreadToSession(threadId: string, sessionId: string) {
     this._threadIdToSessionId.set(threadId, sessionId);
     this._db
@@ -923,7 +927,6 @@ export class FeishuMessageChannel
       .run();
   }
 
-  /** Resolve a session ID from a thread ID, falling back to DB then generating a new one. */
   private _resolveSessionId(threadId: string | undefined): string {
     if (threadId && this._threadIdToSessionId.has(threadId)) {
       return this._threadIdToSessionId.get(threadId)!;

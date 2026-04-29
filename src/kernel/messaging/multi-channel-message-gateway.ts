@@ -171,10 +171,6 @@ export class MultiChannelMessageGateway
     return this._resolveChannel(channelId);
   }
 
-  /**
-   * Send a text reply in a thread, creating the thread if needed.
-   * Routes to the correct channel based on session `channel_id`.
-   */
   async replyTextInThread(
     messageId: string,
     sessionId: string,

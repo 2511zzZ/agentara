@@ -380,7 +380,7 @@ ${instruction}`,
     await this._messageGateway.replyTextInThread(
       anchor.id,
       session.id,
-      skipped ? "Task skipped." : "✅ 在此话题下继续对话",
+      "Reply here to continue the conversation",
     );
   };
 
@@ -443,7 +443,7 @@ ${payload.instruction}`,
     await this._messageGateway.replyTextInThread(
       anchor.id,
       session.id,
-      skipped ? "Task skipped." : "✅ 在此话题下继续对话",
+      "Reply here to continue the conversation",
     );
   };
 }

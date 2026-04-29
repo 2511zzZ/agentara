@@ -68,10 +68,6 @@ export interface MessageChannel extends EventEmitter {
 
   /**
    * Send a text reply in a thread, creating the thread if it doesn't exist.
-   * Also maps the thread to the session for future message routing.
-   * @param messageId - ID of the message to reply to.
-   * @param sessionId - Session ID to map to the thread.
-   * @param text - Plain text content (supports Feishu at-mention syntax).
    */
   replyTextInThread(
     // eslint-disable-next-line no-unused-vars
