@@ -6,6 +6,7 @@ import {
   config,
   createLogger,
   extractTextContent,
+  formatReplyContext,
   reloadConfig,
   uuid,
   type InboundMessageTaskPayload,
@@ -265,6 +266,34 @@ class Kernel {
     return contents;
   };
 
+  private _prependReplyContext(message: UserMessage): UserMessage {
+    const prefix = formatReplyContext(message);
+    if (!prefix) return message;
+
+    this._logger.info(
+      {
+        sessionId: message.session_id,
+        replyToMessageId: message.replyTo!.messageId,
+        replyType: message.replyTo!.replyType,
+      },
+      "prepending reply context to message",
+    );
+
+    const newContent = [...message.content];
+    const firstTextIdx = newContent.findIndex((c) => c.type === "text");
+    if (firstTextIdx >= 0) {
+      const original = newContent[firstTextIdx] as { type: "text"; text: string };
+      newContent[firstTextIdx] = {
+        type: "text",
+        text: prefix + original.text,
+      };
+    } else {
+      newContent.unshift({ type: "text" as const, text: prefix.trimEnd() });
+    }
+
+    return { ...message, content: newContent };
+  }
+
   private _handleInboundMessageTask = async (
     _taskId: string,
     sessionId: string,
@@ -285,7 +314,8 @@ class Kernel {
       },
       { streaming: true },
     );
-    await this._streamToMessage(session, inboundMessage, outboundMessage.id, signal);
+    const messageForAgent = this._prependReplyContext(inboundMessage);
+    await this._streamToMessage(session, messageForAgent, outboundMessage.id, signal);
   };
 
   private _handleScheduledTask = async (

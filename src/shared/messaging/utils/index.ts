@@ -8,6 +8,7 @@ import type {
   SkillToolUseMessageContent,
   ToolSearchToolUseMessageContent,
   ToolUseMessageContent,
+  UserMessage,
   WebFetchToolUseMessageContent,
   WebSearchToolUseMessageContent,
   WriteToolUseMessageContent,
@@ -83,6 +84,12 @@ export function extractTextContent(
     }
   }
   return result.join("\n\n").trim();
+}
+
+export function formatReplyContext(message: UserMessage): string {
+  if (!("replyTo" in message) || !message.replyTo) return "";
+  const sender = message.replyTo.sender ? ` sender="${message.replyTo.sender}"` : "";
+  return `<replying_to${sender}>\n${message.replyTo.content}\n</replying_to>\n\n`;
 }
 
 function extractToolUse(content: ToolUseMessageContent): string {
