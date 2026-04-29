@@ -710,31 +710,8 @@ export class FeishuMessageChannel
           }
           return parts.length > 0 ? parts.join(" ") : null;
         }
-        case "interactive": {
-          const cardParts: string[] = [];
-          if (parsed.header?.title?.content) cardParts.push(parsed.header.title.content);
-          const extractElements = (elements: unknown[]) => {
-            for (const el of elements as Array<Record<string, unknown>>) {
-              if (!el?.tag) continue;
-              if (el.tag === "markdown" && el.content) {
-                cardParts.push(el.content as string);
-              } else if (el.tag === "div" && (el.text as Record<string, unknown>)?.content) {
-                cardParts.push((el.text as Record<string, unknown>).content as string);
-              } else if (el.tag === "column_set" && Array.isArray(el.columns)) {
-                for (const col of el.columns as Array<Record<string, unknown>>) {
-                  if (Array.isArray(col.elements)) extractElements(col.elements);
-                }
-              } else if (el.tag === "note" && Array.isArray(el.elements)) {
-                for (const n of el.elements as Array<Record<string, unknown>>) {
-                  if (n.content) cardParts.push(n.content as string);
-                  if (n.text) cardParts.push(n.text as string);
-                }
-              }
-            }
-          };
-          if (Array.isArray(parsed.elements)) extractElements(parsed.elements);
-          return cardParts.length > 0 ? cardParts.join("\n") : "[interactive card]";
-        }
+        case "interactive":
+          return rawContent;
         default:
           return `[${msgType ?? "unknown"} message]`;
       }
