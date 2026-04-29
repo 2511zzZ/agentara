@@ -784,7 +784,7 @@ export class FeishuMessageChannel
     let replyType: "parent" | "root" | undefined;
 
     if (parentId && rootId) {
-      this._logger.warn(
+      this._logger.debug(
         { messageId, parentId, rootId },
         "message has both parent_id and root_id; preferring parent_id",
       );
