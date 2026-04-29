@@ -673,8 +673,17 @@ export class FeishuMessageChannel
         this._logger.warn({ messageId, msgType: item.msg_type }, "could not extract readable content from source message");
         return null;
       }
+      const MAX_REPLY_CONTEXT_LENGTH = 2000;
+      let trimmedContent = content;
+      if (content.length > MAX_REPLY_CONTEXT_LENGTH) {
+        this._logger.info(
+          { messageId, originalLength: content.length },
+          "truncating long source message",
+        );
+        trimmedContent = content.slice(0, MAX_REPLY_CONTEXT_LENGTH) + "\n[...truncated]";
+      }
       return {
-        content,
+        content: trimmedContent,
         sender: item.sender?.id,
       };
     } catch (err) {
