@@ -757,53 +757,61 @@ export class FeishuMessageChannel
       "inbound message thread fields",
     );
 
-    const session_id = this._resolveSessionId(threadId);
+    const { sessionId: session_id, resumed } = this._resolveSessionId(threadId);
 
-    // Determine reply context from parent_id / root_id
+    // Only populate reply context when starting a new session (no existing thread mapping).
+    // When resuming an existing session, the conversation history already provides full context.
     let replyTo: ReplyContext | undefined;
 
-    let sourceMessageId: string | undefined;
-    let replyType: "parent" | "root" | undefined;
+    if (!resumed) {
+      let sourceMessageId: string | undefined;
+      let replyType: "parent" | "root" | undefined;
 
-    if (parentId && rootId) {
-      this._logger.debug(
-        { messageId, parentId, rootId },
-        "message has both parent_id and root_id; preferring parent_id",
-      );
-      sourceMessageId = parentId;
-      replyType = "parent";
-    } else if (parentId) {
-      sourceMessageId = parentId;
-      replyType = "parent";
-    } else if (rootId) {
-      sourceMessageId = rootId;
-      replyType = "root";
-    }
-
-    if (sourceMessageId && replyType) {
-      const sourceMessage = await this._fetchSourceMessage(sourceMessageId);
-      if (sourceMessage) {
-        replyTo = {
-          messageId: sourceMessageId,
-          content: sourceMessage.content,
-          sender: sourceMessage.sender,
-          replyType,
-        };
-        this._logger.info(
-          {
-            messageId,
-            sourceMessageId,
-            replyType,
-            contentPreview: sourceMessage.content.slice(0, 80),
-          },
-          "replyTo populated",
+      if (parentId && rootId) {
+        this._logger.debug(
+          { messageId, parentId, rootId },
+          "message has both parent_id and root_id; preferring parent_id",
         );
-      } else {
-        this._logger.info(
-          { messageId, sourceMessageId, replyType },
-          "replyTo skipped: source message fetch returned null",
-        );
+        sourceMessageId = parentId;
+        replyType = "parent";
+      } else if (parentId) {
+        sourceMessageId = parentId;
+        replyType = "parent";
+      } else if (rootId) {
+        sourceMessageId = rootId;
+        replyType = "root";
       }
+
+      if (sourceMessageId && replyType) {
+        const sourceMessage = await this._fetchSourceMessage(sourceMessageId);
+        if (sourceMessage) {
+          replyTo = {
+            messageId: sourceMessageId,
+            content: sourceMessage.content,
+            sender: sourceMessage.sender,
+            replyType,
+          };
+          this._logger.info(
+            {
+              messageId,
+              sourceMessageId,
+              replyType,
+              contentPreview: sourceMessage.content.slice(0, 80),
+            },
+            "replyTo populated",
+          );
+        } else {
+          this._logger.info(
+            { messageId, sourceMessageId, replyType },
+            "replyTo skipped: source message fetch returned null",
+          );
+        }
+      }
+    } else {
+      this._logger.debug(
+        { messageId, threadId, session_id },
+        "replyTo skipped: resuming existing session",
+      );
     }
 
     const userMessage: UserMessage = {
@@ -904,9 +912,9 @@ export class FeishuMessageChannel
       .run();
   }
 
-  private _resolveSessionId(threadId: string | undefined): string {
+  private _resolveSessionId(threadId: string | undefined): { sessionId: string; resumed: boolean } {
     if (threadId && this._threadIdToSessionId.has(threadId)) {
-      return this._threadIdToSessionId.get(threadId)!;
+      return { sessionId: this._threadIdToSessionId.get(threadId)!, resumed: true };
     }
     if (threadId) {
       const row = this._db
@@ -916,10 +924,10 @@ export class FeishuMessageChannel
         .get();
       if (row) {
         this._threadIdToSessionId.set(threadId, row.session_id);
-        return row.session_id;
+        return { sessionId: row.session_id, resumed: true };
       }
     }
-    return uuid();
+    return { sessionId: uuid(), resumed: false };
   }
 
   private async _parseMessageContent(

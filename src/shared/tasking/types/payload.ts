@@ -21,6 +21,8 @@ export const ScheduledTaskPayload = z.object({
   type: z.literal("scheduled_task"),
   /** The instruction string sent to the agent. */
   instruction: z.string(),
+  /** Optional working directory for the session. Falls back to config.paths.home. */
+  cwd: z.string().optional(),
   /** Optional project name this task belongs to. */
   project_name: z.string().optional(),
 });
@@ -36,8 +38,8 @@ export const TaskSchedule = z
   .object({
     /** Epoch milliseconds for one-shot execution at a specific time. */
     at: z.number().int().positive().optional(),
-    /** Delay in milliseconds before one-shot execution (converted to `at` on registration). */
-    delay: z.number().int().positive().optional(),
+    /** Delay in milliseconds before one-shot execution (converted to `at` on registration). 0 means immediate. */
+    delay: z.number().int().nonnegative().optional(),
     /** Cron expression, e.g. `"0 3 * * *"`. */
     pattern: z.string().optional(),
     /** Interval in milliseconds between executions. */
@@ -54,6 +56,8 @@ export const TaskSchedule = z
       const hasOneShot = data.at !== undefined || data.delay !== undefined;
       const hasRecurring =
         data.pattern !== undefined || data.every !== undefined;
+      const hasImmediate = data.immediately === true && !hasOneShot && !hasRecurring;
+      if (hasImmediate) return true;
       if (hasOneShot && hasRecurring) return false;
       if (!hasOneShot && !hasRecurring) return false;
       if (hasOneShot && data.at !== undefined && data.delay !== undefined)
@@ -62,27 +66,10 @@ export const TaskSchedule = z
     },
     {
       message:
-        "Provide exactly one: 'at' or 'delay' (one-shot) or 'pattern'/'every' (recurring); 'at' and 'delay' are mutually exclusive",
+        "Provide exactly one: 'at' or 'delay' (one-shot), 'pattern'/'every' (recurring), or 'immediately: true' (run once now); 'at' and 'delay' are mutually exclusive",
     },
   );
 export interface TaskSchedule extends z.infer<typeof TaskSchedule> {}
-
-/**
- * Payload for an instant task triggered via API.
- * Executes immediately in a specified working directory.
- */
-export const InstantTaskPayload = z.object({
-  type: z.literal("instant_task"),
-  /** The instruction string sent to the agent. */
-  instruction: z.string(),
-  /** The working directory for the session. */
-  cwd: z.string(),
-  /** Optional project name this task belongs to. */
-  project_name: z.string().optional(),
-});
-export interface InstantTaskPayload extends z.infer<
-  typeof InstantTaskPayload
-> {}
 
 /**
  * Discriminated union of all supported task payloads.
@@ -90,9 +77,7 @@ export interface InstantTaskPayload extends z.infer<
 export const TaskPayload = z.discriminatedUnion("type", [
   InboundMessageTaskPayload,
   ScheduledTaskPayload,
-  InstantTaskPayload,
 ]);
 export type TaskPayload =
   | InboundMessageTaskPayload
-  | ScheduledTaskPayload
-  | InstantTaskPayload;
+  | ScheduledTaskPayload;

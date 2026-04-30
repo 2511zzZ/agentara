@@ -43,6 +43,10 @@ export const scheduledTasks = sqliteTable("scheduled_tasks", {
   session_id: text("session_id"),
   /** The instruction string sent to the agent. */
   instruction: text("instruction").notNull(),
+  /** Optional working directory for the session. */
+  cwd: text("cwd"),
+  /** Optional project name this task belongs to. */
+  project_name: text("project_name"),
   /** The schedule configuration serialised as JSON ({@link TaskSchedule}). */
   schedule: text("schedule", { mode: "json" }).notNull(),
   /** Epoch milliseconds when the scheduled task was created. */

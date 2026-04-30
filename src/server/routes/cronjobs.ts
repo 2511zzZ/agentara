@@ -19,6 +19,10 @@ const ScheduleTaskBody = z.object({
   session_id: z.string().uuid().optional().nullable(),
   /** The instruction string sent to the agent. */
   instruction: z.string(),
+  /** Optional working directory for the session. Falls back to config.paths.home. */
+  cwd: z.string().optional(),
+  /** Optional project name this task belongs to. Routes output to project channel. */
+  project_name: z.string().optional(),
   /** The schedule configuration describing when to run. */
   schedule: TaskSchedule,
 });
@@ -36,7 +40,12 @@ export const cronjobsRoutes = new Hono()
     const sessionId = body.session_id ?? null;
     const schedulerId = await kernel.taskDispatcher.scheduleTask(
       sessionId,
-      { type: "scheduled_task", instruction: body.instruction },
+      {
+        type: "scheduled_task",
+        instruction: body.instruction,
+        ...(body.cwd ? { cwd: body.cwd } : {}),
+        ...(body.project_name ? { project_name: body.project_name } : {}),
+      },
       body.schedule,
     );
     return c.json(
@@ -53,7 +62,12 @@ export const cronjobsRoutes = new Hono()
       try {
         await kernel.taskDispatcher.updateScheduledTask(
           schedulerId,
-          { type: "scheduled_task", instruction: body.instruction },
+          {
+            type: "scheduled_task",
+            instruction: body.instruction,
+            ...(body.cwd ? { cwd: body.cwd } : {}),
+            ...(body.project_name ? { project_name: body.project_name } : {}),
+          },
           body.schedule,
           body.session_id,
         );

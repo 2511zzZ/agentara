@@ -70,6 +70,8 @@ interface ScheduledTaskRow {
   id: string;
   session_id: string | null;
   instruction: string;
+  cwd: string | null;
+  project_name: string | null;
   schedule: TaskSchedule;
   created_at: number;
   updated_at: number;
@@ -180,6 +182,48 @@ export class TaskDispatcher {
     };
     const now = Date.now();
 
+    // Handle "immediately: true" or "delay: 0" as standalone schedule — run once now
+    const isImmediateOnly =
+      (schedule.immediately === true || schedule.delay === 0) &&
+      schedule.at === undefined &&
+      (schedule.delay === undefined || schedule.delay === 0) &&
+      schedule.pattern === undefined &&
+      schedule.every === undefined;
+
+    if (isImmediateOnly) {
+      const job = await this._queue.add("scheduled_task", jobData);
+      this._db
+        .insert(scheduledTasks)
+        .values({
+          id: schedulerId,
+          session_id: sessionId,
+          instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
+          schedule: { immediately: true, _job_id: job.id },
+          created_at: now,
+          updated_at: now,
+        })
+        .run();
+      this._db
+        .insert(tasks)
+        .values({
+          id: job.id,
+          session_id: sessionId ?? schedulerId,
+          type: "scheduled_task",
+          status: "pending",
+          payload,
+          created_at: now,
+          updated_at: now,
+        })
+        .run();
+      this._logger.info(
+        { scheduler_id: schedulerId, session_id: sessionId },
+        "immediate one-shot scheduled task registered",
+      );
+      return schedulerId;
+    }
+
     const at =
       schedule.at ??
       (schedule.delay !== undefined ? now + schedule.delay : undefined);
@@ -201,6 +245,8 @@ export class TaskDispatcher {
           id: schedulerId,
           session_id: sessionId,
           instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
           schedule: scheduleWithJobId,
           created_at: now,
           updated_at: now,
@@ -209,6 +255,8 @@ export class TaskDispatcher {
           target: scheduledTasks.id,
           set: {
             instruction: payload.instruction,
+            cwd: payload.cwd ?? null,
+            project_name: payload.project_name ?? null,
             schedule: scheduleWithJobId,
             updated_at: now,
           },
@@ -239,6 +287,8 @@ export class TaskDispatcher {
         id: schedulerId,
         session_id: sessionId,
         instruction: payload.instruction,
+        cwd: payload.cwd ?? null,
+        project_name: payload.project_name ?? null,
         schedule,
         created_at: now,
         updated_at: now,
@@ -247,6 +297,8 @@ export class TaskDispatcher {
         target: scheduledTasks.id,
         set: {
           instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
           schedule,
           updated_at: now,
         },
@@ -296,8 +348,13 @@ export class TaskDispatcher {
     }
     const newSessionId = sessionId !== undefined ? sessionId : row.session_id;
     const now = Date.now();
-    const wasOneShot = row.schedule.at !== undefined;
     const sched = row.schedule;
+    const wasImmediateOnly =
+      sched.immediately === true &&
+      sched.at === undefined &&
+      sched.pattern === undefined &&
+      sched.every === undefined;
+    const wasOneShot = sched.at !== undefined || wasImmediateOnly;
 
     if (sched._job_id) {
       try {
@@ -314,7 +371,46 @@ export class TaskDispatcher {
     const at =
       schedule.at ??
       (schedule.delay !== undefined ? now + schedule.delay : undefined);
-    if (at !== undefined) {
+    // Handle "immediately: true" or "delay: 0" as standalone schedule update — run once now
+    const isImmediateOnly =
+      (schedule.immediately === true || schedule.delay === 0) &&
+      schedule.at === undefined &&
+      (schedule.delay === undefined || schedule.delay === 0) &&
+      schedule.pattern === undefined &&
+      schedule.every === undefined;
+
+    if (isImmediateOnly) {
+      const jobData: TaskJobData = {
+        session_id: newSessionId,
+        payload,
+        scheduler_id: schedulerId,
+      };
+      const job = await this._queue.add("scheduled_task", jobData);
+      this._db
+        .update(scheduledTasks)
+        .set({
+          session_id: newSessionId,
+          instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
+          schedule: { immediately: true, _job_id: job.id },
+          updated_at: now,
+        })
+        .where(eq(scheduledTasks.id, schedulerId))
+        .run();
+      this._db
+        .insert(tasks)
+        .values({
+          id: job.id,
+          session_id: newSessionId ?? schedulerId,
+          type: "scheduled_task",
+          status: "pending",
+          payload,
+          created_at: now,
+          updated_at: now,
+        })
+        .run();
+    } else if (at !== undefined) {
       if (at <= now) {
         throw new Error(
           `Schedule 'at' must be in the future (got ${at}, now ${now})`,
@@ -336,6 +432,8 @@ export class TaskDispatcher {
         .set({
           session_id: newSessionId,
           instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
           schedule: scheduleWithJobId,
           updated_at: now,
         })
@@ -359,6 +457,8 @@ export class TaskDispatcher {
         .set({
           session_id: newSessionId,
           instruction: payload.instruction,
+          cwd: payload.cwd ?? null,
+          project_name: payload.project_name ?? null,
           schedule,
           updated_at: now,
         })
@@ -406,7 +506,12 @@ export class TaskDispatcher {
         // Job may have run or been removed
       }
     }
-    if (row && sched?.at === undefined) {
+    const isImmediateOnly =
+      sched?.immediately === true &&
+      sched?.at === undefined &&
+      sched?.pattern === undefined &&
+      sched?.every === undefined;
+    if (row && sched?.at === undefined && !isImmediateOnly) {
       await this._queue.removeJobScheduler(schedulerId);
     }
     this._db
@@ -582,6 +687,8 @@ export class TaskDispatcher {
       const payload: ScheduledTaskPayload = {
         type: "scheduled_task",
         instruction: r.instruction,
+        ...(r.cwd ? { cwd: r.cwd } : {}),
+        ...(r.project_name ? { project_name: r.project_name } : {}),
       };
       const jobData: TaskJobData = {
         session_id: r.session_id,
@@ -589,7 +696,28 @@ export class TaskDispatcher {
         scheduler_id: r.id,
       };
 
-      if (sched.at !== undefined && sched.at > now) {
+      // Immediate-only one-shot: job is already queued, re-enqueue if missing
+      const isImmediateOnly =
+        sched.immediately === true &&
+        sched.at === undefined &&
+        sched.pattern === undefined &&
+        sched.every === undefined;
+
+      if (isImmediateOnly) {
+        if (sched._job_id) {
+          const existing = await this._queue.getJob(sched._job_id);
+          if (!existing) {
+            // Job was lost (e.g. process crash before execution); re-enqueue
+            const job = await this._queue.add("scheduled_task", jobData);
+            const scheduleWithJobId = { ...sched, _job_id: job.id };
+            this._db
+              .update(scheduledTasks)
+              .set({ schedule: scheduleWithJobId, updated_at: now })
+              .where(eq(scheduledTasks.id, r.id))
+              .run();
+          }
+        }
+      } else if (sched.at !== undefined && sched.at > now) {
         const existing = await this._queue.getJob(sched._job_id ?? "");
         if (!existing) {
           const delay = sched.at - now;
@@ -662,8 +790,16 @@ export class TaskDispatcher {
           const scheduled = this.getScheduledTasks().find(
             (r) => r.id === schedulerId,
           );
-          if (scheduled?.schedule.at !== undefined) {
-            await this.removeScheduledTask(schedulerId);
+          if (scheduled) {
+            const s = scheduled.schedule;
+            const isOneShot =
+              s.at !== undefined ||
+              (s.immediately === true &&
+                s.pattern === undefined &&
+                s.every === undefined);
+            if (isOneShot) {
+              await this.removeScheduledTask(schedulerId);
+            }
           }
         }
       } catch (err) {

@@ -10,7 +10,6 @@ import {
   reloadConfig,
   uuid,
   type InboundMessageTaskPayload,
-  type InstantTaskPayload,
   type ScheduledTaskPayload,
 } from "@/shared";
 import {
@@ -89,7 +88,6 @@ class Kernel {
       this._handleInboundMessageTask,
     );
     this._taskDispatcher.route("scheduled_task", this._handleScheduledTask);
-    this._taskDispatcher.route("instant_task", this._handleInstantTask);
   }
 
   private _initMessageGateway(): void {
@@ -332,8 +330,9 @@ class Kernel {
       defaultChannelId = resolveChannelForProject(payload.project_name);
     }
     defaultChannelId ??= config.messaging.default_channel_id;
-    const { instruction, type: _taskType, project_name: _pn, ...scheduleMeta } = payload;
+    const { instruction, type: _taskType, project_name: _pn, cwd: _cwd, ...scheduleMeta } = payload;
     void _taskType;
+    const sessionCwd = payload.cwd ?? config.paths.home;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",
@@ -351,7 +350,7 @@ ${instruction}`,
       ],
     };
     const session = await this._sessionManager.resolveSession(sessionId, {
-      cwd: config.paths.home,
+      cwd: sessionCwd,
       channelId: userMessage.channel_id,
       firstMessage: userMessage,
     });
@@ -384,68 +383,6 @@ ${instruction}`,
     );
   };
 
-  private _handleInstantTask = async (
-    _taskId: string,
-    sessionId: string,
-    payload: InstantTaskPayload,
-    signal?: AbortSignal,
-  ) => {
-    let channelId = payload.project_name
-      ? resolveChannelForProject(payload.project_name)
-      : undefined;
-    if (!channelId && payload.project_name) {
-      this._reloadChannels();
-      channelId = resolveChannelForProject(payload.project_name);
-    }
-    channelId ??= config.messaging.default_channel_id;
-    const userMessage: UserMessage = {
-      id: uuid(),
-      role: "user",
-      session_id: sessionId,
-      channel_id: channelId,
-      content: [
-        {
-          type: "text",
-          text: `> This message is triggered by an instant task.
-> The time is now ${new Date().toString()}.
-
-${payload.instruction}`,
-        },
-      ],
-    };
-    const session = await this._sessionManager.resolveSession(sessionId, {
-      cwd: payload.cwd,
-      channelId: userMessage.channel_id,
-      firstMessage: userMessage,
-    });
-    const briefInstruction = payload.instruction.slice(0, 200) + (payload.instruction.length > 200 ? "..." : "");
-    const anchorMessage = {
-      role: "assistant" as const,
-      session_id: session.id,
-      content: [
-        { type: "text" as const, text: `**⏳ Instant Task**\n> ${briefInstruction}` },
-      ],
-    };
-    const isProjectChannel = !!resolveProjectForChannel(channelId);
-    const anchor = isProjectChannel
-      ? await this._messageGateway.postMessage(anchorMessage)
-      : await this._messageGateway.sendDirectMessage(channelId, anchorMessage);
-    const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
-    const skipped = contents
-      .filter((c): c is { type: "text"; text: string } => c.type === "text")
-      .some((c) => c.text.includes("[SKIPPED]"));
-    if (skipped) {
-      await this._messageGateway.updateMessageContent(
-        { ...anchor, content: [{ type: "text", text: "Task skipped." }] },
-        { streaming: false },
-      );
-    }
-    await this._messageGateway.replyTextInThread(
-      anchor.id,
-      session.id,
-      "Reply here to continue the conversation",
-    );
-  };
 }
 
 export const kernel = new Kernel();
