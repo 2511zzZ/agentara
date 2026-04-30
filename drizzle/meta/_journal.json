@@ -85,6 +85,13 @@
       "when": 1777536832687,
       "tag": "0011_minor_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777700000000,
+      "tag": "0012_remove_project_concept",
+      "breakpoints": true
     }
   ]
 }

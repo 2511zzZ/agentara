@@ -23,8 +23,8 @@ export const ScheduledTaskPayload = z.object({
   instruction: z.string(),
   /** Optional working directory for the session. Falls back to config.paths.home. */
   cwd: z.string().optional(),
-  /** Optional project name this task belongs to. */
-  project_name: z.string().optional(),
+  /** Optional channel ID for routing output. Falls back to default channel. */
+  channel_id: z.string().optional(),
 });
 export interface ScheduledTaskPayload extends z.infer<
   typeof ScheduledTaskPayload

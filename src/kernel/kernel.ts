@@ -12,11 +12,6 @@ import {
   type InboundMessageTaskPayload,
   type ScheduledTaskPayload,
 } from "@/shared";
-import {
-  resetRegistry,
-  resolveChannelForProject,
-  resolveProjectForChannel,
-} from "@/shared/config/channel-project-registry";
 
 import { HonoServer } from "../server";
 
@@ -129,7 +124,6 @@ class Kernel {
 
   private _reloadChannels(): void {
     reloadConfig();
-    resetRegistry();
 
     const defaultChannelId = config.messaging.default_channel_id;
     const fallbackChannel = this._messageGateway.getChannel(defaultChannelId) as FeishuMessageChannel | undefined;
@@ -322,22 +316,14 @@ class Kernel {
     payload: ScheduledTaskPayload,
     signal?: AbortSignal,
   ) => {
-    let defaultChannelId = payload.project_name
-      ? resolveChannelForProject(payload.project_name)
-      : undefined;
-    if (!defaultChannelId && payload.project_name) {
-      this._reloadChannels();
-      defaultChannelId = resolveChannelForProject(payload.project_name);
-    }
-    defaultChannelId ??= config.messaging.default_channel_id;
-    const { instruction, type: _taskType, project_name: _pn, cwd: _cwd, ...scheduleMeta } = payload;
-    void _taskType;
+    const channelId = payload.channel_id ?? config.messaging.default_channel_id;
     const sessionCwd = payload.cwd ?? config.paths.home;
+    const { instruction, type: _type, channel_id: _ch, cwd: _cwd, ...scheduleMeta } = payload;
     const userMessage: UserMessage = {
       id: uuid(),
       role: "user",
       session_id: sessionId,
-      channel_id: defaultChannelId,
+      channel_id: channelId,
       content: [
         {
           type: "text",
@@ -362,10 +348,10 @@ ${instruction}`,
         { type: "text" as const, text: `**⏳ Scheduled Task**\n> ${briefInstruction}` },
       ],
     };
-    const isProjectChannel = !!resolveProjectForChannel(defaultChannelId);
-    const anchor = isProjectChannel
+    const isGroupChannel = channelId !== config.messaging.default_channel_id;
+    const anchor = isGroupChannel
       ? await this._messageGateway.postMessage(anchorMessage)
-      : await this._messageGateway.sendDirectMessage(defaultChannelId, anchorMessage);
+      : await this._messageGateway.sendDirectMessage(channelId, anchorMessage);
     const contents = await this._streamToMessage(session, userMessage, anchor.id, signal);
     const skipped = contents
       .filter((c): c is { type: "text"; text: string } => c.type === "text")

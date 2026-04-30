@@ -15,8 +15,6 @@ export const sessions = sqliteTable("sessions", {
   cwd: text("cwd").notNull(),
   /** The channel id this session belongs to, or null for legacy sessions. */
   channel_id: text("channel_id"),
-  /** The project name this session is bound to, or null for unbound sessions. */
-  project_name: text("project_name"),
   /** The text content of the session's first inbound message. */
   first_message: text("first_message").notNull().default(""),
   /** Runner-specific session/thread id (e.g. Codex thread id) for resume. */

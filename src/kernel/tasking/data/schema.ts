@@ -45,8 +45,8 @@ export const scheduledTasks = sqliteTable("scheduled_tasks", {
   instruction: text("instruction").notNull(),
   /** Optional working directory for the session. */
   cwd: text("cwd"),
-  /** Optional project name this task belongs to. */
-  project_name: text("project_name"),
+  /** Optional channel ID for routing output. */
+  channel_id: text("channel_id"),
   /** The schedule configuration serialised as JSON ({@link TaskSchedule}). */
   schedule: text("schedule", { mode: "json" }).notNull(),
   /** Epoch milliseconds when the scheduled task was created. */

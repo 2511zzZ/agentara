@@ -71,7 +71,7 @@ interface ScheduledTaskRow {
   session_id: string | null;
   instruction: string;
   cwd: string | null;
-  project_name: string | null;
+  channel_id: string | null;
   schedule: TaskSchedule;
   created_at: number;
   updated_at: number;
@@ -199,7 +199,7 @@ export class TaskDispatcher {
           session_id: sessionId,
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule: { immediately: true, _job_id: job.id },
           created_at: now,
           updated_at: now,
@@ -246,7 +246,7 @@ export class TaskDispatcher {
           session_id: sessionId,
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule: scheduleWithJobId,
           created_at: now,
           updated_at: now,
@@ -256,7 +256,7 @@ export class TaskDispatcher {
           set: {
             instruction: payload.instruction,
             cwd: payload.cwd ?? null,
-            project_name: payload.project_name ?? null,
+            channel_id: payload.channel_id ?? null,
             schedule: scheduleWithJobId,
             updated_at: now,
           },
@@ -288,7 +288,7 @@ export class TaskDispatcher {
         session_id: sessionId,
         instruction: payload.instruction,
         cwd: payload.cwd ?? null,
-        project_name: payload.project_name ?? null,
+        channel_id: payload.channel_id ?? null,
         schedule,
         created_at: now,
         updated_at: now,
@@ -298,7 +298,7 @@ export class TaskDispatcher {
         set: {
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule,
           updated_at: now,
         },
@@ -392,7 +392,7 @@ export class TaskDispatcher {
           session_id: newSessionId,
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule: { immediately: true, _job_id: job.id },
           updated_at: now,
         })
@@ -433,7 +433,7 @@ export class TaskDispatcher {
           session_id: newSessionId,
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule: scheduleWithJobId,
           updated_at: now,
         })
@@ -458,7 +458,7 @@ export class TaskDispatcher {
           session_id: newSessionId,
           instruction: payload.instruction,
           cwd: payload.cwd ?? null,
-          project_name: payload.project_name ?? null,
+          channel_id: payload.channel_id ?? null,
           schedule,
           updated_at: now,
         })
@@ -688,7 +688,7 @@ export class TaskDispatcher {
         type: "scheduled_task",
         instruction: r.instruction,
         ...(r.cwd ? { cwd: r.cwd } : {}),
-        ...(r.project_name ? { project_name: r.project_name } : {}),
+        ...(r.channel_id ? { channel_id: r.channel_id } : {}),
       };
       const jobData: TaskJobData = {
         session_id: r.session_id,

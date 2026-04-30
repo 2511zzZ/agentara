@@ -88,5 +88,8 @@ export const config = {
     }
     return _appConfig.messaging;
   },
+  get session() {
+    return _appConfig?.session;
+  },
   paths,
 };

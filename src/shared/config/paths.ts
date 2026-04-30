@@ -23,20 +23,6 @@ export const projects = join(workspace, "projects");
 export const uploads = join(workspace, "uploads");
 export const outputs = join(workspace, "outputs");
 
-export const project_registry = join(home, "projects");
-export function resolveProjectDir(projectName: string) {
-  return join(project_registry, projectName);
-}
-export function resolveProjectMetaPath(projectName: string) {
-  return join(project_registry, projectName, "meta.yaml");
-}
-export function resolveProjectContextPath(projectName: string) {
-  return join(project_registry, projectName, "context.md");
-}
-export function resolveProjectTasksDir(projectName: string) {
-  return join(project_registry, projectName, "tasks");
-}
-
 export const data = join(home, "data");
 export function resolveDataFilePath(filename: string) {
   return join(data, filename);

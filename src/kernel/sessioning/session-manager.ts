@@ -5,10 +5,6 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { DrizzleDB } from "@/data";
 import type { Session as SessionEntity, UserMessage } from "@/shared";
 import { config, createLogger, extractTextContent, uuid } from "@/shared";
-import {
-  resolveProjectCwd,
-  resolveProjectForChannel,
-} from "@/shared/config/channel-project-registry";
 
 import { sessions } from "./data";
 import { Session } from "./session";
@@ -113,12 +109,9 @@ export class SessionManager {
 
     const agentType = options?.agentType ?? config.agents.default.type;
     const channelId = options?.channelId ?? null;
-    const projectName = channelId
-      ? resolveProjectForChannel(channelId) ?? null
-      : null;
     const cwd =
       options?.cwd ??
-      (projectName ? resolveProjectCwd(projectName) : null) ??
+      (channelId ? this._resolveCwdForChannel(channelId) : null) ??
       config.paths.home;
     const now = Date.now();
 
@@ -129,7 +122,6 @@ export class SessionManager {
         agent_type: agentType,
         cwd,
         channel_id: channelId,
-        project_name: projectName,
         last_message_created_at: null,
         runner_session_id: null,
         created_at: now,
@@ -219,6 +211,23 @@ export class SessionManager {
       unlinkSync(filePath);
     }
     this._logger.info(`Removed session: ${sessionId}`);
+  }
+
+  /**
+   * Resolves a working directory for the given channel by running an external
+   * cwd_resolver script (if configured). Returns null when no resolver is set
+   * or the script produces no output.
+   */
+  private _resolveCwdForChannel(channelId: string): string | null {
+    const resolver = config.session?.cwd_resolver;
+    if (!resolver) return null;
+    try {
+      const result = Bun.spawnSync([resolver, channelId]);
+      const stdout = result.stdout?.toString().trim();
+      return stdout || null;
+    } catch {
+      return null;
+    }
   }
 
   /**

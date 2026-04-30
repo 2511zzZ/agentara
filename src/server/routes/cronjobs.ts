@@ -21,8 +21,8 @@ const ScheduleTaskBody = z.object({
   instruction: z.string(),
   /** Optional working directory for the session. Falls back to config.paths.home. */
   cwd: z.string().optional(),
-  /** Optional project name this task belongs to. Routes output to project channel. */
-  project_name: z.string().optional(),
+  /** Optional channel ID for routing output. Falls back to default channel. */
+  channel_id: z.string().optional(),
   /** The schedule configuration describing when to run. */
   schedule: TaskSchedule,
 });
@@ -44,7 +44,7 @@ export const cronjobsRoutes = new Hono()
         type: "scheduled_task",
         instruction: body.instruction,
         ...(body.cwd ? { cwd: body.cwd } : {}),
-        ...(body.project_name ? { project_name: body.project_name } : {}),
+        ...(body.channel_id ? { channel_id: body.channel_id } : {}),
       },
       body.schedule,
     );
@@ -66,7 +66,7 @@ export const cronjobsRoutes = new Hono()
             type: "scheduled_task",
             instruction: body.instruction,
             ...(body.cwd ? { cwd: body.cwd } : {}),
-            ...(body.project_name ? { project_name: body.project_name } : {}),
+            ...(body.channel_id ? { channel_id: body.channel_id } : {}),
           },
           body.schedule,
           body.session_id,
