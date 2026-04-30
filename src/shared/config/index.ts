@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { resolveEnvVars } from "./env-resolver";
 import * as paths from "./paths";
-import type { AppConfig } from "./schema";
-import { AppConfig as AppConfigSchema } from "./schema";
+import type { AppConfig, ChannelConfig } from "./schema";
+import { AppConfig as AppConfigSchema, ChannelConfig as ChannelConfigSchema } from "./schema";
+import { z } from "zod";
 
 export type {
   AgentConfig,
@@ -35,7 +36,25 @@ function _loadConfigFromFile(): AppConfig {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Bun.YAML.parse is not yet in TS types
   const parsed = (Bun as any).YAML.parse(raw);
   const resolved = resolveEnvVars(parsed);
-  return AppConfigSchema.parse(resolved);
+  const appConfig = AppConfigSchema.parse(resolved);
+
+  const channelsPath = join(paths.home, "channels.yaml");
+  if (existsSync(channelsPath)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channelsParsed = (Bun as any).YAML.parse(readFileSync(channelsPath, "utf-8"));
+    const channelsResolved = resolveEnvVars(channelsParsed);
+    const extra = z.array(ChannelConfigSchema).safeParse(channelsResolved);
+    if (extra.success) {
+      const existingIds = new Set(appConfig.messaging.channels.map((c: ChannelConfig) => c.id));
+      for (const ch of extra.data) {
+        if (!existingIds.has(ch.id)) {
+          appConfig.messaging.channels.push(ch);
+        }
+      }
+    }
+  }
+
+  return appConfig;
 }
 
 /**
